@@ -1,6 +1,5 @@
 node_modules
 *.log
-.env
 .env.local
 .env.*.local
 npm-debug.log*
@@ -11,5 +10,4 @@ yarn-error.log*
 *.swo
 .vscode
 .idea
-src
-public
+.cache
