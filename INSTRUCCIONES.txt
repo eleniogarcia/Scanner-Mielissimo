@@ -1,0 +1,51 @@
+🍯 SCANNER MIELISIMO - SISTEMA POS
+=====================================
+
+📋 INSTRUCCIONES DE USO:
+
+1. INICIAR EL SISTEMA
+   └─ Hacer doble clic en: INICIAR_POS.bat
+   └─ Esperar a que se abra el navegador automáticamente
+   └─ NO CERRAR las ventanas negras que aparecen
+   └─ Usar el sistema normalmente
+
+2. DETENER EL SISTEMA
+   └─ Hacer doble clic en: DETENER_POS.bat
+   └─ O simplemente cerrar las 2 ventanas negras (Backend y Frontend)
+
+3. HACER BACKUPS (Copias de seguridad)
+   └─ Hacer doble clic en: CREAR_BACKUP.bat
+   └─ Los backups se guardan en la carpeta "backups"
+   └─ Recomendado: Hacer backup diario o semanal
+   └─ Copiar la carpeta "backups" a USB o nube periódicamente
+
+4. ACCEDER AL SISTEMA
+   └─ URL: http://localhost:5175
+   └─ Si cierras el navegador, abre esa dirección de nuevo
+   └─ El sistema funciona mientras las ventanas negras estén abiertas
+
+5. PÁGINAS DEL SISTEMA
+   └─ 🛒 POS: Para vender productos
+   └─ 📦 Productos: Agregar/editar productos
+   └─ 📊 Ventas: Ver historial de ventas
+
+⚠️ IMPORTANTE:
+   - Los datos NUNCA se borran automáticamente
+   - Están guardados de forma permanente en PostgreSQL
+   - Hacer backups regularmente por seguridad
+   - NO mover ni borrar la carpeta "pos-system"
+   - NO desinstalar PostgreSQL
+
+💡 TIPS:
+   - Puedes crear un acceso directo de INICIAR_POS.bat en el escritorio
+   - El sistema funciona sin internet (100% local)
+   - Todos los datos están en tu computadora
+   - Compatible con lectores de códigos de barras
+
+📞 SOPORTE:
+   - Si algo no funciona, ejecuta DETENER_POS.bat y vuelve a iniciar
+   - Los productos y ventas están siempre guardados
+
+=====================================
+Versión: 1.0
+Fecha: Febrero 2026
