@@ -1,0 +1,63 @@
+{
+  "name": "mielissimo-pos",
+  "version": "1.0.0",
+  "description": "Sistema POS para Mielissimo - Aplicación de Escritorio",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
+    "dev:backend": "cd backend && cross-env NODE_ENV=development node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend && electron-builder",
+    "build:win": "npm run build:frontend && electron-builder --win",
+    "postinstall": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "build": {
+    "appId": "com.mielissimo.pos",
+    "productName": "Mielissimo POS",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron-main.js",
+      "backend/**/*",
+      "!backend/node_modules/@types/**/*",
+      "!backend/**/*.log",
+      "frontend/dist/**/*",
+      "node_modules/**/*",
+      "!node_modules/**/{CHANGELOG.md,README.md,readme.md,changelog.md}",
+      "!node_modules/**/{test,tests,__tests__}/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mielissimo POS",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  },
+  "keywords": ["pos", "punto de venta", "mielissimo", "ventas", "electron"],
+  "author": "Mielissimo",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}

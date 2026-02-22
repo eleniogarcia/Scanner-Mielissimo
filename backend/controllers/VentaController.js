@@ -89,13 +89,20 @@ class VentaController {
     }
   }
 
-  // GET /api/ventas - Obtener todas las ventas
+  // GET /api/ventas - Obtener todas las ventas con filtros
   static async getAll(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 50;
       const offset = parseInt(req.query.offset) || 0;
       
-      const ventas = await VentaModel.getAll(limit, offset);
+      // Filtros de fecha
+      const filtros = {
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+        periodo: req.query.periodo // 'hoy', 'semana', 'mes'
+      };
+      
+      const ventas = await VentaModel.getAll(limit, offset, filtros);
       
       res.json({
         success: true,
@@ -153,6 +160,128 @@ class VentaController {
       res.status(500).json({
         success: false,
         message: 'Error al obtener ventas de hoy',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/weekly - Obtener ventas de la semana
+  static async getWeekly(req, res) {
+    try {
+      const ventas = await VentaModel.getWeekly();
+      
+      res.json({
+        success: true,
+        count: ventas.length,
+        data: ventas
+      });
+    } catch (error) {
+      console.error('Error obteniendo ventas de la semana:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ventas de la semana',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/monthly - Obtener ventas del mes
+  static async getMonthly(req, res) {
+    try {
+      const ventas = await VentaModel.getMonthly();
+      
+      res.json({
+        success: true,
+        count: ventas.length,
+        data: ventas
+      });
+    } catch (error) {
+      console.error('Error obteniendo ventas del mes:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ventas del mes',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/ganancias - Obtener ganancias con filtros
+  static async getGanancias(req, res) {
+    try {
+      const filtros = {
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+        periodo: req.query.periodo // 'hoy', 'semana', 'mes'
+      };
+      
+      const ganancias = await VentaModel.getGanancias(filtros);
+      
+      res.json({
+        success: true,
+        data: ganancias
+      });
+    } catch (error) {
+      console.error('Error obteniendo ganancias:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ganancias',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/ganancias/hoy - Ganancias de hoy
+  static async getGananciasHoy(req, res) {
+    try {
+      const ganancias = await VentaModel.getGananciasHoy();
+      
+      res.json({
+        success: true,
+        data: ganancias
+      });
+    } catch (error) {
+      console.error('Error obteniendo ganancias de hoy:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ganancias de hoy',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/ganancias/semana - Ganancias de la semana
+  static async getGananciasSemanales(req, res) {
+    try {
+      const ganancias = await VentaModel.getGananciasSemanales();
+      
+      res.json({
+        success: true,
+        data: ganancias
+      });
+    } catch (error) {
+      console.error('Error obteniendo ganancias semanales:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ganancias semanales',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/ventas/ganancias/mes - Ganancias del mes
+  static async getGananciasMensuales(req, res) {
+    try {
+      const ganancias = await VentaModel.getGananciasMensuales();
+      
+      res.json({
+        success: true,
+        data: ganancias
+      });
+    } catch (error) {
+      console.error('Error obteniendo ganancias mensuales:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener ganancias mensuales',
         error: error.message
       });
     }

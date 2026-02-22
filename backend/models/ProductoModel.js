@@ -45,28 +45,33 @@ class ProductoModel {
 
   // Crear producto
   static async create(data) {
-    const { nombre, codigo, precio } = data;
+    const { nombre, codigo, precio, stock, fabricante, costo } = data;
     
     const result = await db.query(
-      `INSERT INTO productos (nombre, codigo, precio, activo) 
-       VALUES ($1, $2, $3, true) 
+      `INSERT INTO productos (nombre, codigo, precio, costo, stock, fabricante, activo, precio_actualizado_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP) 
        RETURNING *`,
-      [nombre, codigo || null, precio]
+      [nombre, codigo || null, precio, costo || 0, stock || 0, fabricante || null]
     );
     
     return result.rows[0];
   }
 
   // Actualizar producto
-  static async update(id, data) {
-    const { nombre, codigo, precio, activo } = data;
+  static async update(id, data, precioAnterior) {
+    const { nombre, codigo, precio, stock, fabricante, costo, activo } = data;
+    
+    // Si el precio cambió, actualizar precio_actualizado_at
+    const precioQuery = precioAnterior !== undefined && parseFloat(precio) !== parseFloat(precioAnterior)
+      ? ', precio_actualizado_at = CURRENT_TIMESTAMP'
+      : '';
     
     const result = await db.query(
       `UPDATE productos 
-       SET nombre = $1, codigo = $2, precio = $3, activo = $4, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5 
+       SET nombre = $1, codigo = $2, precio = $3, costo = $4, stock = $5, fabricante = $6, activo = $7, updated_at = CURRENT_TIMESTAMP${precioQuery}
+       WHERE id = $8 
        RETURNING *`,
-      [nombre, codigo || null, precio, activo, id]
+      [nombre, codigo || null, precio, costo !== undefined ? costo : 0, stock !== undefined ? stock : 0, fabricante || null, activo, id]
     );
     
     return result.rows[0];
@@ -133,10 +138,10 @@ class ProductoModel {
           
           // Insertar producto
           const result = await client.query(
-            `INSERT INTO productos (nombre, codigo, precio, activo) 
-             VALUES ($1, $2, $3, true) 
+            `INSERT INTO productos (nombre, codigo, precio, costo, stock, fabricante, activo, precio_actualizado_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP) 
              RETURNING *`,
-            [producto.nombre, producto.codigo || null, producto.precio]
+            [producto.nombre, producto.codigo || null, producto.precio, producto.costo || 0, producto.stock || 0, producto.fabricante || null]
           );
           
           productosCreados.push(result.rows[0]);

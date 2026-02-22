@@ -56,15 +56,65 @@ class VentaModel {
     }
   }
 
-  // Obtener todas las ventas con paginación
-  static async getAll(limit = 50, offset = 0) {
-    const result = await db.query(
-      `SELECT * FROM ventas 
-       ORDER BY created_at DESC 
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
+  // Obtener todas las ventas con paginación y filtros de fecha
+  static async getAll(limit = 50, offset = 0, filtros = {}) {
+    let query = `SELECT * FROM ventas WHERE 1=1`;
+    const params = [];
+    let paramCount = 0;
+
+    // Filtro de rango de fechas
+    if (filtros.startDate && filtros.endDate) {
+      paramCount++;
+      params.push(filtros.startDate);
+      paramCount++;
+      params.push(filtros.endDate);
+      query += ` AND created_at BETWEEN $${paramCount - 1} AND $${paramCount}`;
+    } else if (filtros.startDate) {
+      paramCount++;
+      params.push(filtros.startDate);
+      query += ` AND created_at >= $${paramCount}`;
+    } else if (filtros.endDate) {
+      paramCount++;
+      params.push(filtros.endDate);
+      query += ` AND created_at <= $${paramCount}`;
+    }
+
+    // Filtros predefinidos
+    if (filtros.periodo === 'hoy') {
+      query += ` AND DATE(created_at) = CURRENT_DATE`;
+    } else if (filtros.periodo === 'semana') {
+      query += ` AND created_at >= CURRENT_DATE - INTERVAL '7 days'`;
+    } else if (filtros.periodo === 'mes') {
+      query += ` AND created_at >= CURRENT_DATE - INTERVAL '30 days'`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+    
+    paramCount++;
+    params.push(limit);
+    query += ` LIMIT $${paramCount}`;
+    
+    paramCount++;
+    params.push(offset);
+    query += ` OFFSET $${paramCount}`;
+
+    const ventasResult = await db.query(query, params);
+    
+    // Obtener items para cada venta
+    const ventas = await Promise.all(
+      ventasResult.rows.map(async (venta) => {
+        const itemsResult = await db.query(
+          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
+          [venta.id]
+        );
+        return {
+          ...venta,
+          items: itemsResult.rows
+        };
+      })
     );
-    return result.rows;
+    
+    return ventas;
   }
 
   // Obtener venta por ID con items
@@ -91,16 +141,77 @@ class VentaModel {
 
   // Obtener ventas de hoy
   static async getToday() {
-    const result = await db.query(
-      `SELECT v.*, 
-              COUNT(vi.id) as total_items 
-       FROM ventas v
-       LEFT JOIN venta_items vi ON v.id = vi.venta_id
-       WHERE DATE(v.created_at) = CURRENT_DATE
-       GROUP BY v.id
-       ORDER BY v.created_at DESC`
+    const ventasResult = await db.query(
+      `SELECT * FROM ventas 
+       WHERE DATE(created_at) = CURRENT_DATE
+       ORDER BY created_at DESC`
     );
-    return result.rows;
+    
+    // Obtener items para cada venta
+    const ventas = await Promise.all(
+      ventasResult.rows.map(async (venta) => {
+        const itemsResult = await db.query(
+          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
+          [venta.id]
+        );
+        return {
+          ...venta,
+          items: itemsResult.rows
+        };
+      })
+    );
+    
+    return ventas;
+  }
+
+  // Obtener ventas de la semana
+  static async getWeekly() {
+    const ventasResult = await db.query(
+      `SELECT * FROM ventas 
+       WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
+       ORDER BY created_at DESC`
+    );
+    
+    // Obtener items para cada venta
+    const ventas = await Promise.all(
+      ventasResult.rows.map(async (venta) => {
+        const itemsResult = await db.query(
+          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
+          [venta.id]
+        );
+        return {
+          ...venta,
+          items: itemsResult.rows
+        };
+      })
+    );
+    
+    return ventas;
+  }
+
+  // Obtener ventas del mes
+  static async getMonthly() {
+    const ventasResult = await db.query(
+      `SELECT * FROM ventas 
+       WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+       ORDER BY created_at DESC`
+    );
+    
+    // Obtener items para cada venta
+    const ventas = await Promise.all(
+      ventasResult.rows.map(async (venta) => {
+        const itemsResult = await db.query(
+          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
+          [venta.id]
+        );
+        return {
+          ...venta,
+          items: itemsResult.rows
+        };
+      })
+    );
+    
+    return ventas;
   }
 
   // Estadísticas de ventas
@@ -144,6 +255,79 @@ class VentaModel {
       [limit]
     );
     return result.rows;
+  }
+
+  // Calcular ganancias por período
+  static async getGanancias(filtros = {}) {
+    let query = `
+      SELECT 
+        COUNT(DISTINCT v.id) as total_ventas,
+        COALESCE(SUM(vi.subtotal), 0) as ingresos_totales,
+        COALESCE(SUM(vi.cantidad * p.costo), 0) as costos_totales,
+        COALESCE(SUM(vi.subtotal) - SUM(vi.cantidad * p.costo), 0) as ganancia_neta,
+        COALESCE(SUM(vi.cantidad), 0) as productos_vendidos
+      FROM ventas v
+      INNER JOIN venta_items vi ON v.id = vi.venta_id
+      LEFT JOIN productos p ON vi.producto_id = p.id
+      WHERE 1=1
+    `;
+
+    const params = [];
+    let paramCount = 0;
+
+    // Filtros de fecha
+    if (filtros.startDate && filtros.endDate) {
+      paramCount++;
+      params.push(filtros.startDate);
+      paramCount++;
+      params.push(filtros.endDate);
+      query += ` AND v.created_at BETWEEN $${paramCount - 1} AND $${paramCount}`;
+    } else if (filtros.startDate) {
+      paramCount++;
+      params.push(filtros.startDate);
+      query += ` AND v.created_at >= $${paramCount}`;
+    } else if (filtros.endDate) {
+      paramCount++;
+      params.push(filtros.endDate);
+      query += ` AND v.created_at <= $${paramCount}`;
+    }
+
+    // Filtros predefinidos
+    if (filtros.periodo === 'hoy') {
+      query += ` AND DATE(v.created_at) = CURRENT_DATE`;
+    } else if (filtros.periodo === 'semana') {
+      query += ` AND v.created_at >= CURRENT_DATE - INTERVAL '7 days'`;
+    } else if (filtros.periodo === 'mes') {
+      query += ` AND v.created_at >= CURRENT_DATE - INTERVAL '30 days'`;
+    }
+
+    const result = await db.query(query, params);
+    const data = result.rows[0];
+    
+    // Calcular margen de ganancia porcentual
+    const margenPorcentaje = data.ingresos_totales > 0 
+      ? ((data.ganancia_neta / data.ingresos_totales) * 100).toFixed(2)
+      : 0;
+
+    return {
+      ...data,
+      margen_porcentaje: parseFloat(margenPorcentaje)
+    };
+  }
+
+  // Ganancias de hoy
+  static async getGananciasHoy() {
+    return this.getGanancias({ periodo: 'hoy' });
+  }
+
+  // Ganancias de la semana
+  static async getGananciasSemanales() {
+    return this.getGanancias({ periodo: 'semana' });
+  }
+
+  // Ganancias del mes
+  static async getGananciasMensuales() {
+    return this.getGanancias({ periodo: 'mes' });
   }
 
   // Eliminar venta

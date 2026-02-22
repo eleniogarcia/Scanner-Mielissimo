@@ -13,6 +13,8 @@ function POS() {
   const [seleccionIndex, setSeleccionIndex] = useState(-1);
   const inputRef = useRef(null);
   const timeoutRef = useRef(null);
+  const scanBufferRef = useRef({ valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null, esEscaneo: false });
+  const scanTimeoutRef = useRef(null);
 
   // Cargar carrito desde localStorage al iniciar
   useEffect(() => {
@@ -64,6 +66,29 @@ function POS() {
     }
   }, [mensaje]);
 
+  // Mantener focus en el input para que el escáner siempre funcione
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      // Si hacen click fuera de modales o botones, enfocar el input
+      if (e.target.tagName !== 'BUTTON' && 
+          e.target.tagName !== 'INPUT' && 
+          e.target.tagName !== 'TEXTAREA' &&
+          !e.target.closest('.modal-overlay') &&
+          !e.target.closest('.sugerencias-dropdown')) {
+        inputRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    
+    // Focus inicial
+    inputRef.current?.focus();
+    
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, []);
+
   // Calcular totales
   const calcularTotal = () => {
     return carrito.reduce((sum, item) => sum + item.subtotal, 0);
@@ -71,6 +96,38 @@ function POS() {
 
   const calcularCantidadTotal = () => {
     return carrito.reduce((sum, item) => sum + item.cantidad, 0);
+  };
+
+  // Buscar producto directo (para escaneo - sin sugerencias)
+  const buscarProductoDirecto = async (codigoProducto) => {
+    if (!codigoProducto.trim()) {
+      return;
+    }
+
+    setBuscando(true);
+    setSugerencias([]);
+    setMostrarSugerencias(false);
+    
+    try {
+      const response = await productosAPI.getByCodigo(codigoProducto);
+      const producto = response.data.data;
+      
+      agregarAlCarrito(producto);
+      mostrarMensaje('success', `✓ ${producto.nombre} agregado`);
+      setCodigo('');
+      scanBufferRef.current = { valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null, esEscaneo: false };
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mostrarMensaje('error', `✗ Producto no encontrado: ${codigoProducto}`);
+      } else {
+        mostrarMensaje('error', 'Error al buscar producto');
+      }
+      console.error('Error:', error);
+      setCodigo('');
+      scanBufferRef.current = { valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null, esEscaneo: false };
+    } finally {
+      setBuscando(false);
+    }
   };
 
   // Buscar producto por código (fallback para búsqueda directa)
@@ -90,6 +147,7 @@ function POS() {
       mostrarMensaje('success', `✓ ${producto.nombre} agregado`);
       setCodigo('');
       setSugerencias([]);
+      scanBufferRef.current = { valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null, esEscaneo: false };
     } catch (error) {
       if (error.response?.status === 404) {
         mostrarMensaje('error', `✗ Producto no encontrado: ${codigoProducto}`);
@@ -230,7 +288,7 @@ function POS() {
     }
   };
 
-  // Búsqueda automática al escribir
+  // Búsqueda automática al escribir (solo para input manual)
   const handleCodigoChange = (e) => {
     const valor = e.target.value;
     setCodigo(valor);
@@ -239,18 +297,53 @@ function POS() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+    }
     
     // Si el valor es vacío, limpiar sugerencias
     if (!valor.trim()) {
       setSugerencias([]);
       setMostrarSugerencias(false);
+      scanBufferRef.current = { valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null };
       return;
     }
     
-    // Buscar sugerencias después de 300ms
+    // Detectar si es escaneo o escritura manual
+    const ahora = Date.now();
+    
+    // Si es el primer carácter, marcar inicio
+    if (!scanBufferRef.current.inicioEscritura || scanBufferRef.current.valor === '') {
+      scanBufferRef.current = { 
+        valor: valor, 
+        ultimaActualizacion: ahora, 
+        inicioEscritura: ahora,
+        esEscaneo: true 
+      };
+    } else {
+      const tiempoDesdeInicio = ahora - scanBufferRef.current.inicioEscritura;
+      const tiempoEntreCaracteres = ahora - scanBufferRef.current.ultimaActualizacion;
+      
+      // Si cada carácter llega rápido (< 50ms), probablemente es escáner
+      // Si tarda más de 100ms entre caracteres, es escritura manual
+      const esEscaneo = tiempoEntreCaracteres < 100 && tiempoDesdeInicio < 500;
+      
+      scanBufferRef.current = { 
+        valor: valor, 
+        ultimaActualizacion: ahora,
+        inicioEscritura: scanBufferRef.current.inicioEscritura,
+        esEscaneo: esEscaneo
+      };
+    }
+    
+    // Solo mostrar sugerencias para escritura manual lenta
+    // Esperar 400ms para asegurarse de que no es un escaneo
     timeoutRef.current = setTimeout(() => {
-      buscarSugerencias(valor);
-    }, 300);
+      // Si no es escaneo y el usuario está escribiendo lentamente, mostrar sugerencias
+      if (!scanBufferRef.current.esEscaneo && valor.length >= 2) {
+        buscarSugerencias(valor);
+      }
+    }, 400);
   };
   
   // Seleccionar producto de las sugerencias
@@ -258,6 +351,7 @@ function POS() {
     agregarAlCarrito(producto);
     mostrarMensaje('success', `✓ ${producto.nombre} agregado`);
     setCodigo('');
+    scanBufferRef.current = { valor: '', ultimaActualizacion: Date.now(), inicioEscritura: null, esEscaneo: false };
     setSugerencias([]);
     setMostrarSugerencias(false);
     inputRef.current?.focus();
@@ -265,38 +359,55 @@ function POS() {
 
   // Manejar teclas en el input
   const handleKeyPress = (e) => {
-    if (!mostrarSugerencias || sugerencias.length === 0) {
-      if (e.key === 'Enter' && codigo.trim()) {
-        buscarProducto(codigo);
+    // Si presiona Enter
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Cancelar cualquier búsqueda de sugerencias pendiente
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Ocultar sugerencias inmediatamente
+      setSugerencias([]);
+      setMostrarSugerencias(false);
+      setSeleccionIndex(-1);
+      
+      // Si hay sugerencias visibles y navegó con flechas
+      if (seleccionIndex >= 0 && sugerencias.length > 0) {
+        seleccionarProducto(sugerencias[seleccionIndex]);
+        return;
+      }
+      
+      // Si hay código, buscar directamente (escaneo o búsqueda manual)
+      if (codigo.trim()) {
+        buscarProductoDirecto(codigo);
       }
       return;
     }
 
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSeleccionIndex(prev => 
-          prev < sugerencias.length - 1 ? prev + 1 : prev
-        );
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSeleccionIndex(prev => prev > 0 ? prev - 1 : -1);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (seleccionIndex >= 0 && seleccionIndex < sugerencias.length) {
-          seleccionarProducto(sugerencias[seleccionIndex]);
-        } else if (sugerencias.length === 1) {
-          seleccionarProducto(sugerencias[0]);
-        }
-        break;
-      case 'Escape':
-        setSugerencias([]);
-        setMostrarSugerencias(false);
-        break;
-      default:
-        break;
+    // Navegación en sugerencias con flechas
+    if (mostrarSugerencias && sugerencias.length > 0) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setSeleccionIndex(prev => 
+            prev < sugerencias.length - 1 ? prev + 1 : 0
+          );
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setSeleccionIndex(prev => prev > 0 ? prev - 1 : sugerencias.length - 1);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setSugerencias([]);
+          setMostrarSugerencias(false);
+          setSeleccionIndex(-1);
+          break;
+        default:
+          break;
+      }
     }
   };
 

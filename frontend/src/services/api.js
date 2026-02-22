@@ -56,6 +56,12 @@ export const ventasAPI = {
   getToday: () => 
     api.get('/ventas/today'),
   
+  getWeekly: () => 
+    api.get('/ventas/weekly'),
+  
+  getMonthly: () => 
+    api.get('/ventas/monthly'),
+  
   getStats: (startDate, endDate) => {
     let url = '/ventas/stats';
     const params = new URLSearchParams();
@@ -64,6 +70,24 @@ export const ventasAPI = {
     const queryString = params.toString();
     return api.get(queryString ? `${url}?${queryString}` : url);
   },
+
+  getGanancias: (filtros = {}) => {
+    const params = new URLSearchParams();
+    if (filtros.periodo) params.append('periodo', filtros.periodo);
+    if (filtros.startDate) params.append('startDate', filtros.startDate);
+    if (filtros.endDate) params.append('endDate', filtros.endDate);
+    const queryString = params.toString();
+    return api.get(`/ventas/ganancias${queryString ? '?' + queryString : ''}`);
+  },
+
+  getGananciasHoy: () => 
+    api.get('/ventas/ganancias/hoy'),
+  
+  getGananciasSemanales: () => 
+    api.get('/ventas/ganancias/semana'),
+  
+  getGananciasMensuales: () => 
+    api.get('/ventas/ganancias/mes'),
   
   getTopProducts: (limit = 10) => 
     api.get(`/ventas/top-products?limit=${limit}`),

@@ -17,6 +17,9 @@ function Productos() {
     nombre: '',
     codigo: '',
     precio: '',
+    costo: 0,
+    stock: 0,
+    fabricante: '',
     activo: true
   });
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
@@ -87,6 +90,9 @@ function Productos() {
       nombre: producto.nombre,
       codigo: producto.codigo || '',
       precio: producto.precio,
+      costo: producto.costo || 0,
+      stock: producto.stock || 0,
+      fabricante: producto.fabricante || '',
       activo: producto.activo
     });
     setShowModal(true);
@@ -107,7 +113,7 @@ function Productos() {
   const cerrarModal = () => {
     setShowModal(false);
     setEditando(null);
-    setFormData({ nombre: '', codigo: '', precio: '', activo: true });
+    setFormData({ nombre: '', codigo: '', precio: '', costo: 0, stock: 0, fabricante: '', activo: true });
   };
 
   const mostrarMensaje = (tipo, texto) => {
@@ -176,9 +182,9 @@ function Productos() {
 
   const cargarEjemplo = () => {
     const ejemplo = [
-      { nombre: 'Ejemplo Producto 1', codigo: '1111111111111', precio: 25.50 },
-      { nombre: 'Ejemplo Producto 2', codigo: '2222222222222', precio: 15.00 },
-      { nombre: 'Ejemplo Producto 3', precio: 30.75 }
+      { nombre: 'Ejemplo Producto 1', codigo: '1111111111111', precio: 25.50, costo: 15.00, stock: 100, fabricante: 'Fabricante A' },
+      { nombre: 'Ejemplo Producto 2', codigo: '2222222222222', precio: 15.00, costo: 8.00, stock: 50 },
+      { nombre: 'Ejemplo Producto 3', precio: 30.75, costo: 20.00, stock: 25, fabricante: 'Fabricante B' }
     ];
     setBulkJSON(JSON.stringify(ejemplo, null, 2));
   };
@@ -233,6 +239,8 @@ function Productos() {
                 <th>Nombre</th>
                 <th>Código</th>
                 <th>Precio</th>
+                <th>Stock</th>
+                <th>Fabricante</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
@@ -240,7 +248,7 @@ function Productos() {
             <tbody>
               {productosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>
                     {busqueda ? 'No se encontraron productos' : 'No hay productos registrados'}
                   </td>
                 </tr>
@@ -248,7 +256,14 @@ function Productos() {
                 productosFiltrados.map(producto => (
                   <tr key={producto.id}>
                     <td>{producto.id}</td>
-                    <td><strong>{producto.nombre}</strong></td>
+                    <td>
+                      <strong>{producto.nombre}</strong>
+                      {producto.precio_actualizado_at && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                          📅 Precio actualizado: {new Date(producto.precio_actualizado_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       {producto.codigo ? (
                         <code style={{ fontSize: '0.8125rem' }}>{producto.codigo}</code>
@@ -257,6 +272,25 @@ function Productos() {
                       )}
                     </td>
                     <td><strong>${parseFloat(producto.precio).toFixed(2)}</strong></td>
+                    <td>
+                      <span style={{ 
+                        padding: '0.25rem 0.5rem', 
+                        borderRadius: '4px',
+                        backgroundColor: producto.stock > 10 ? '#d4edda' : producto.stock > 0 ? '#fff3cd' : '#f8d7da',
+                        color: producto.stock > 10 ? '#155724' : producto.stock > 0 ? '#856404' : '#721c24',
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}>
+                        {producto.stock || 0}
+                      </span>
+                    </td>
+                    <td>
+                      {producto.fabricante ? (
+                        <span style={{ fontSize: '0.875rem' }}>{producto.fabricante}</span>
+                      ) : (
+                        <span className="text-secondary">-</span>
+                      )}
+                    </td>
                     <td>
                       {producto.activo ? (
                         <span className="badge badge-success">Activo</span>
@@ -328,7 +362,7 @@ function Productos() {
 
               <div className="grid grid-cols-2" style={{ gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="label">Precio *</label>
+                  <label className="label">Precio de Venta *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -339,6 +373,45 @@ function Productos() {
                     required
                   />
                 </div>
+
+                <div className="form-group">
+                  <label className="label">Costo</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="input"
+                    value={formData.costo}
+                    onChange={(e) => setFormData({ ...formData, costo: e.target.value })}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-secondary" style={{ marginTop: '0.25rem' }}>
+                    Para calcular ganancias
+                  </p>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="label">Stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="input"
+                  value={formData.stock}
+                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="label">Fabricante</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={formData.fabricante}
+                  onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
+                  placeholder="Opcional"
+                />
               </div>
 
               {editando && (
@@ -390,7 +463,8 @@ function Productos() {
                 />
                 <p className="text-xs text-secondary" style={{ marginTop: '0.5rem' }}>
                   📋 <strong>Formato:</strong> Array JSON con objetos que contengan: <code>nombre</code> (requerido), 
-                  <code>codigo</code> (opcional), <code>precio</code> (requerido)
+                  <code>codigo</code> (opcional), <code>precio</code> (requerido), <code>costo</code> (opcional),
+                  <code>stock</code> (opcional), <code>fabricante</code> (opcional)
                 </p>
                 <p className="text-xs text-secondary" style={{ marginTop: '0.25rem' }}>
                   ⚠️ Máximo 1000 productos por carga

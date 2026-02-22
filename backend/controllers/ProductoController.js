@@ -205,7 +205,8 @@ class ProductoController {
         }
       }
 
-      const producto = await ProductoModel.update(id, req.body);
+      // Pasar el precio anterior para detectar cambios
+      const producto = await ProductoModel.update(id, req.body, existing.precio);
       
       res.json({
         success: true,
