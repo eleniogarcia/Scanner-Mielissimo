@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ventasAPI } from '../services/api';
-import FacturaA from '../components/FacturaA';
 import './Ventas.css';
 
 function Ventas() {
@@ -9,48 +8,36 @@ function Ventas() {
   const [stats, setStats] = useState(null);
   const [ganancias, setGanancias] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('todas'); // todas, hoy, semana, mes, personalizado, estadisticas, facturacion
+  const [tab, setTab] = useState('historial'); // historial, resumen
+  const [periodo, setPeriodo] = useState('hoy'); // hoy, semana, mes, todas, personalizado
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [periodoGanancias, setPeriodoGanancias] = useState('hoy');
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+
+  // Ranking
+  const [rankingData, setRankingData] = useState([]);
+  const [periodoRanking, setPeriodoRanking] = useState('hoy');
+  const [loadingRanking, setLoadingRanking] = useState(false);
   
-  // Estados para factura
-  const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
-  const [mostrarFactura, setMostrarFactura] = useState(false);
-  const [datosEmpresa, setDatosEmpresa] = useState({
-    razonSocial: '',
-    domicilio: '',
-    localidad: '',
-    provincia: '',
-    codigoArea: '',
-    telefono: '',
-    cuit: '',
-    ingresosBrutos: '',
-    inicioActividades: '',
-    puntoVenta: '0001',
-    numeroFactura: '00000001',
-    cae: '',
-    vencimientoCAE: ''
-  });
-  const [datosCliente, setDatosCliente] = useState({
-    razonSocial: '',
-    cuit: '',
-    domicilio: '',
-    localidad: '',
-    provincia: '',
-    telefono: '',
-    condicionIVA: 'Responsable Inscripto',
-    condicionVenta: 'Contado'
-  });
-  const [ventasFactura, setVentasFactura] = useState([]);
-  const [totalesFactura, setTotalesFactura] = useState({ neto_gravado: 0, total: 0 });
-  const [erroresFactura, setErroresFactura] = useState({});
-  const facturaRef = useRef();
+  // Estados para impresión de pedidos
+  const [mostrarImpresion, setMostrarImpresion] = useState(false);
+  const [ventasImpresion, setVentasImpresion] = useState([]);
+  const [cargandoImpresion, setCargandoImpresion] = useState(false);
+  const impresionRef = useRef();
+  const isPrintingRef = useRef(false);
 
   useEffect(() => {
-    cargarDatos();
-  }, [tab]);
+    if (tab === 'ranking') cargarRanking();
+  }, [tab, periodoRanking]);
+
+  useEffect(() => {
+    if (tab === 'historial') cargarDatos();
+  }, [tab, periodo]);
+
+  useEffect(() => {
+    if (tab === 'resumen') cargarDatos();
+  }, [tab, periodoGanancias]);
 
   useEffect(() => {
     if (mensaje.texto) {
@@ -62,44 +49,24 @@ function Ventas() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      if (tab === 'todas') {
-        const response = await ventasAPI.getAll(100, 0);
-        setVentas(response.data.data);
-      } else if (tab === 'hoy') {
-        const response = await ventasAPI.getToday();
-        setVentas(response.data.data);
-      } else if (tab === 'semana') {
-        const response = await ventasAPI.getWeekly();
-        setVentas(response.data.data);
-      } else if (tab === 'mes') {
-        const response = await ventasAPI.getMonthly();
-        setVentas(response.data.data);
-      } else if (tab === 'personalizado') {
-        // Si hay fechas, filtrar por rango
-        if (fechaInicio || fechaFin) {
-          const params = new URLSearchParams();
-          if (fechaInicio) params.append('startDate', fechaInicio);
-          if (fechaFin) params.append('endDate', fechaFin);
-          const response = await ventasAPI.getAll(100, 0);
-          // Filtrar en frontend temporalmente (mejor hacerlo en backend)
-          let ventasFiltradas = response.data.data;
-          if (fechaInicio) {
-            ventasFiltradas = ventasFiltradas.filter(v => new Date(v.created_at) >= new Date(fechaInicio));
-          }
-          if (fechaFin) {
-            const fechaFinDate = new Date(fechaFin);
-            fechaFinDate.setHours(23, 59, 59, 999);
-            ventasFiltradas = ventasFiltradas.filter(v => new Date(v.created_at) <= fechaFinDate);
-          }
-          setVentas(ventasFiltradas);
-        } else {
+      if (tab === 'historial') {
+        if (periodo === 'hoy') {
+          const response = await ventasAPI.getToday();
+          setVentas(response.data.data);
+        } else if (periodo === 'semana') {
+          const response = await ventasAPI.getWeekly();
+          setVentas(response.data.data);
+        } else if (periodo === 'mes') {
+          const response = await ventasAPI.getMonthly();
+          setVentas(response.data.data);
+        } else if (periodo === 'todas') {
           const response = await ventasAPI.getAll(100, 0);
           setVentas(response.data.data);
+        } else if (periodo === 'personalizado') {
+          const response = await ventasAPI.getAll(500, 0, fechaInicio || null, fechaFin || null);
+          setVentas(response.data.data);
         }
-      } else if (tab === 'estadisticas') {
-        const response = await ventasAPI.getStats();
-        setStats(response.data.data);
-      } else if (tab === 'facturacion') {
+      } else if (tab === 'resumen') {
         const filtros = {};
         if (periodoGanancias && periodoGanancias !== 'personalizado') {
           filtros.periodo = periodoGanancias;
@@ -151,153 +118,271 @@ function Ventas() {
     });
   };
 
-  const abrirModalFactura = () => {
-    setErroresFactura({});
-    setMostrarModalFactura(true);
-  };
-
-  const cerrarModalFactura = () => {
-    setErroresFactura({});
-    setMostrarModalFactura(false);
-  };
-
-  const generarFactura = async () => {
-    // Validar campos obligatorios
-    const errores = {};
-    
-    if (!datosEmpresa.razonSocial) errores.empresaRazonSocial = 'Este campo es obligatorio';
-    if (!datosEmpresa.cuit) errores.empresaCuit = 'Este campo es obligatorio';
-    if (!datosCliente.razonSocial) errores.clienteRazonSocial = 'Este campo es obligatorio';
-    if (!datosCliente.cuit) errores.clienteCuit = 'Este campo es obligatorio';
-    
-    if (Object.keys(errores).length > 0) {
-      setErroresFactura(errores);
-      return;
-    }
-
-    setErroresFactura({});
-
+  const cargarRanking = async () => {
+    setLoadingRanking(true);
     try {
-      // Obtener ventas del período seleccionado
-      let ventasPeriodo = [];
-      if (periodoGanancias === 'hoy') {
-        const response = await ventasAPI.getToday();
-        ventasPeriodo = response.data.data || [];
-      } else if (periodoGanancias === 'semana') {
-        const response = await ventasAPI.getWeekly();
-        ventasPeriodo = response.data.data || [];
-      } else if (periodoGanancias === 'mes') {
-        const response = await ventasAPI.getMonthly();
-        ventasPeriodo = response.data.data || [];
-      } else if (periodoGanancias === 'personalizado') {
-        const response = await ventasAPI.getAll(1000, 0);
-        ventasPeriodo = (response.data.data || []).filter(v => {
-          const fechaVenta = new Date(v.fecha);
-          const inicio = fechaInicio ? new Date(fechaInicio) : new Date(0);
-          const fin = fechaFin ? new Date(fechaFin) : new Date();
-          return fechaVenta >= inicio && fechaVenta <= fin;
-        });
+      let ventasLista = [];
+      if (periodoRanking === 'hoy') {
+        const r = await ventasAPI.getToday(); ventasLista = r.data.data || [];
+      } else if (periodoRanking === 'semana') {
+        const r = await ventasAPI.getWeekly(); ventasLista = r.data.data || [];
+      } else if (periodoRanking === 'mes') {
+        const r = await ventasAPI.getMonthly(); ventasLista = r.data.data || [];
+      } else {
+        const r = await ventasAPI.getAll(300, 0); ventasLista = r.data.data || [];
       }
-
-      // Verificar si hay ventas
-      if (!ventasPeriodo || ventasPeriodo.length === 0) {
-        setMensaje({ tipo: 'error', texto: 'No hay ventas en el período seleccionado para facturar' });
-        return;
-      }
-
-      // Consolidar productos vendidos
-      const productosMap = new Map();
-      let totalNeto = 0;
-
-      ventasPeriodo.forEach(venta => {
-        if (venta.items && Array.isArray(venta.items)) {
-          venta.items.forEach(item => {
-            const key = item.producto_codigo || item.codigo || `${item.producto_nombre || item.nombre}_${item.producto_id}`;
-            if (productosMap.has(key)) {
-              const existing = productosMap.get(key);
-              existing.cantidad += item.cantidad;
-            } else {
-              productosMap.set(key, {
-                codigo: item.producto_codigo || item.codigo || 'S/C',
-                nombre: item.producto_nombre || item.nombre || 'Producto',
-                cantidad: item.cantidad || 0,
-                precio: item.precio_unitario || 0
-              });
-            }
-            totalNeto += parseFloat(item.subtotal || 0);
-          });
+      // Usar solo ventas que ya traen items (evitar N+1 llamadas que traban la app)
+      const conDetalle = ventasLista.filter(v => Array.isArray(v.items) && v.items.length > 0);
+      // Agregar por producto
+      const mapa = {};
+      for (const v of conDetalle) {
+        if (!v.items) continue;
+        for (const it of v.items) {
+          const k = it.producto_nombre;
+          if (!mapa[k]) mapa[k] = { nombre: k, cantidad: 0, ingresos: 0, pedidos: 0 };
+          mapa[k].cantidad += Number(it.cantidad);
+          mapa[k].ingresos += Number(it.subtotal);
+          mapa[k].pedidos += 1;
         }
-      });
+      }
+      const lista = Object.values(mapa).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
+      setRankingData(lista);
+    } catch (e) {
+      console.error('Error ranking:', e);
+    } finally {
+      setLoadingRanking(false);
+    }
+  };
 
-      const productosFactura = Array.from(productosMap.values());
-      
-      if (productosFactura.length === 0) {
-        setMensaje({ tipo: 'error', texto: 'No se encontraron productos para facturar' });
-        return;
+  const clasificarTurnos = (lista) => {
+    const mañana = [];
+    const noche = [];
+    const otras = [];
+    for (const v of lista) {
+      const d = new Date(v.created_at);
+      const mins = d.getHours() * 60 + d.getMinutes();
+      if (mins >= 8 * 60 && mins <= 13 * 60 + 30) {
+        mañana.push(v);
+      } else if (mins >= 17 * 60 && mins <= 21 * 60) {
+        noche.push(v);
+      } else {
+        otras.push(v);
+      }
+    }
+    return { mañana, noche, otras };
+  };
+
+  const imprimirTotalTicket = (lista, per, fInicio, fFin) => {
+    if (isPrintingRef.current) return;
+    isPrintingRef.current = true;
+
+    const { mañana, noche, otras } = clasificarTurnos(lista);
+    const totalMañana = mañana.reduce((acc, v) => acc + parseFloat(v.total || 0), 0).toFixed(2);
+    const totalNoche  = noche.reduce((acc, v) => acc + parseFloat(v.total || 0), 0).toFixed(2);
+    const totalDia    = lista.reduce((acc, v) => acc + parseFloat(v.total || 0), 0).toFixed(2);
+
+    const periodoLabel = per === 'hoy' ? 'Hoy'
+      : per === 'semana' ? 'Última Semana'
+      : per === 'mes' ? 'Último Mes'
+      : per === 'todas' ? 'Todas'
+      : `${fInicio || '—'} → ${fFin || '—'}`;
+    const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hora  = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    const filaOtras = otras.length > 0
+      ? `<div class="turno-row otras">
+           <div class="turno-label">Fuera de turno (${otras.length} ped.)</div>
+           <div class="turno-total">$${otras.reduce((a,v)=>a+parseFloat(v.total||0),0).toFixed(2)}</div>
+         </div>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Resumen Mielissimo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    width: 80mm;
+    padding: 4mm 3mm;
+    color: #000;
+  }
+  .centro { text-align: center; }
+  .titulo { font-size: 24px; font-weight: 900; letter-spacing: 3px; margin: 5px 0 2px; color: #000; }
+  .subtitulo { font-size: 12px; font-weight: bold; margin-bottom: 3px; color: #000; }
+  .linea { border-top: 2px dashed #000; margin: 6px 0; }
+  .linea-solida { border-top: 2px solid #000; margin: 6px 0; }
+  .meta { font-size: 12px; font-weight: bold; margin: 3px 0; color: #000; }
+  .seccion-titulo {
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #000;
+    margin: 4px 0 2px;
+  }
+  .turno-bloque {
+    margin: 4px 0;
+    padding: 5px 0;
+    border-top: 1px dashed #000;
+  }
+  .turno-encabezado {
+    font-size: 13px;
+    font-weight: 900;
+    color: #000;
+    margin-bottom: 2px;
+  }
+  .turno-horario {
+    font-size: 11px;
+    font-weight: bold;
+    color: #000;
+    margin-bottom: 3px;
+  }
+  .turno-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: bold;
+    color: #000;
+    margin: 2px 0;
+  }
+  .turno-total {
+    font-size: 16px;
+    font-weight: 900;
+    color: #000;
+  }
+  .turno-pedidos {
+    font-size: 11px;
+    font-weight: bold;
+    color: #000;
+  }
+  .total-dia-bloque {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 2px solid #000;
+  }
+  .total-dia-label {
+    font-size: 13px;
+    font-weight: 900;
+    color: #000;
+  }
+  .total-dia-monto {
+    font-size: 22px;
+    font-weight: 900;
+    color: #000;
+  }
+  .gracias { font-size: 13px; font-weight: 900; margin-top: 8px; color: #000; }
+  @media print {
+    html, body { width: 80mm; }
+    @page { margin: 0; size: 80mm auto; }
+  }
+</style>
+</head><body>
+  <div class="centro">
+    <div class="titulo">MIELISSIMO</div>
+    <div class="subtitulo">Pedernera 462</div>
+  </div>
+  <div class="linea"></div>
+  <div class="meta">Período: ${periodoLabel}</div>
+  <div class="meta">Fecha: ${fecha} &nbsp; ${hora}</div>
+  <div class="meta">Total pedidos: ${lista.length}</div>
+  <div class="linea"></div>
+
+  <div class="turno-bloque">
+    <div class="turno-encabezado">Turno Mañana</div>
+    <div class="turno-horario">08:00 hs — 13:30 hs &nbsp;·&nbsp; ${mañana.length} pedido(s)</div>
+    <div class="turno-row">
+      <span class="turno-pedidos">Total turno mañana:</span>
+      <span class="turno-total">$${totalMañana}</span>
+    </div>
+  </div>
+
+  <div class="turno-bloque">
+    <div class="turno-encabezado">Turno Tarde</div>
+    <div class="turno-horario">17:00 hs — 21:00 hs &nbsp;·&nbsp; ${noche.length} pedido(s)</div>
+    <div class="turno-row">
+      <span class="turno-pedidos">Total turno tarde:</span>
+      <span class="turno-total">$${totalNoche}</span>
+    </div>
+  </div>
+
+  ${filaOtras}
+
+  <div class="total-dia-bloque">
+    <div class="turno-row">
+      <span class="total-dia-label">TOTAL DEL DÍA:</span>
+      <span class="total-dia-monto">$${totalDia}</span>
+    </div>
+  </div>
+
+  <div class="linea"></div>
+  <div class="centro gracias">¡Gracias!</div>
+</body></html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+    document.body.appendChild(iframe);
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(html);
+    iframe.contentDocument.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch(e) {}
+        isPrintingRef.current = false;
+      }, 2000);
+    }, 300);
+  };
+
+  const imprimirDetallePedidos = async () => {
+    setCargandoImpresion(true);
+    try {
+      let ventasLista = [];
+      if (periodo === 'hoy') {
+        const r = await ventasAPI.getToday();
+        ventasLista = r.data.data || [];
+      } else if (periodo === 'semana') {
+        const r = await ventasAPI.getWeekly();
+        ventasLista = r.data.data || [];
+      } else if (periodo === 'mes') {
+        const r = await ventasAPI.getMonthly();
+        ventasLista = r.data.data || [];
+      } else if (periodo === 'todas') {
+        const r = await ventasAPI.getAll(1000, 0);
+        ventasLista = r.data.data || [];
+      } else if (periodo === 'personalizado') {
+        const r = await ventasAPI.getAll(1000, 0, fechaInicio || null, fechaFin || null);
+        ventasLista = r.data.data || [];
       }
 
-      const totalConIva = totalNeto * 1.21;
+      // Asegurar que cada venta tenga sus items detallados
+      const ventasConDetalle = [];
+      for (const venta of ventasLista) {
+        if (Array.isArray(venta.items) && venta.items.length > 0) {
+          ventasConDetalle.push(venta);
+        } else {
+          try {
+            const r = await ventasAPI.getById(venta.id);
+            ventasConDetalle.push(r.data.data);
+          } catch {
+            ventasConDetalle.push(venta);
+          }
+        }
+      }
 
-      setVentasFactura(productosFactura);
-      setTotalesFactura({
-        neto_gravado: totalNeto,
-        total: totalConIva
-      });
-
-      setMostrarModalFactura(false);
-      setMostrarFactura(true);
+      setVentasImpresion(ventasConDetalle);
+      setMostrarImpresion(true);
     } catch (error) {
-      console.error('Error generando factura:', error);
-      setMensaje({ tipo: 'error', texto: `Error al generar la factura: ${error.message}` });
+      console.error('Error cargando pedidos:', error);
+      setMensaje({ tipo: 'error', texto: 'Error al cargar los pedidos del período' });
+    } finally {
+      setCargandoImpresion(false);
     }
-  };
-
-  const imprimirFactura = () => {
-    window.print();
-  };
-
-  const guardarComoPDF = () => {
-    window.print();
-  };
-
-  const compartirFactura = async () => {
-    const numeroFactura = `${String(datosEmpresa.puntoVenta || '0000').padStart(4, '0')}-${String(datosEmpresa.numeroFactura || '00000001').padStart(8, '0')}`;
-    const resumen = `Factura A ${numeroFactura}\n` +
-      `Emisor: ${datosEmpresa.razonSocial} (CUIT: ${datosEmpresa.cuit})\n` +
-      `Cliente: ${datosCliente.razonSocial} (CUIT: ${datosCliente.cuit})\n` +
-      `Total: $${parseFloat(totalesFactura.total).toFixed(2)}\n` +
-      `Productos: ${ventasFactura.length} items`;
-
-    // Intentar usar Web Share API si está disponible
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Factura A ${numeroFactura}`,
-          text: resumen
-        });
-        setMensaje({ tipo: 'success', texto: 'Factura compartida exitosamente' });
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Error al compartir:', error);
-          copiarAlPortapapeles(resumen);
-        }
-      }
-    } else {
-      copiarAlPortapapeles(resumen);
-    }
-  };
-
-  const copiarAlPortapapeles = (texto) => {
-    navigator.clipboard.writeText(texto).then(() => {
-      setMensaje({ tipo: 'success', texto: 'Datos de la factura copiados al portapapeles' });
-    }).catch(err => {
-      console.error('Error al copiar:', err);
-      setMensaje({ tipo: 'error', texto: 'No se pudo copiar al portapapeles' });
-    });
-  };
-
-  const cerrarVistaFactura = () => {
-    setMostrarFactura(false);
   };
 
   if (loading) {
@@ -310,7 +395,7 @@ function Ventas() {
 
   return (
     <div className="container" style={{ padding: '2rem 1rem' }}>
-      <h1 className="page-title">📊 Historial de Ventas</h1>
+      <h1 className="page-title">Historial de Ventas</h1>
 
       {mensaje.texto && (
         <div className={`alert alert-${mensaje.tipo === 'success' ? 'success' : 'error'} fade-in`}>
@@ -320,99 +405,183 @@ function Ventas() {
 
       {/* Tabs */}
       <div className="tabs">
-        <button
-          className={`tab ${tab === 'todas' ? 'active' : ''}`}
-          onClick={() => setTab('todas')}
-        >
-          Todas
-        </button>
-        <button
-          className={`tab ${tab === 'hoy' ? 'active' : ''}`}
-          onClick={() => setTab('hoy')}
-        >
-          Hoy
-        </button>
-        <button
-          className={`tab ${tab === 'semana' ? 'active' : ''}`}
-          onClick={() => setTab('semana')}
-        >
-          Semana
-        </button>
-        <button
-          className={`tab ${tab === 'mes' ? 'active' : ''}`}
-          onClick={() => setTab('mes')}
-        >
-          Mes
-        </button>
-        <button
-          className={`tab ${tab === 'personalizado' ? 'active' : ''}`}
-          onClick={() => setTab('personalizado')}
-        >
-          Personalizado
-        </button>
-        <button
-          className={`tab ${tab === 'facturacion' ? 'active' : ''}`}
-          onClick={() => setTab('facturacion')}
-        >
-          💰 Facturación
-        </button>
-        <button
-          className={`tab ${tab === 'estadisticas' ? 'active' : ''}`}
-          onClick={() => setTab('estadisticas')}
-        >
-          Estadísticas
-        </button>
+        <button className={`tab ${tab === 'historial' ? 'active' : ''}`} onClick={() => setTab('historial')}>Historial</button>
+        <button className={`tab ${tab === 'ranking' ? 'active' : ''}`} onClick={() => setTab('ranking')}>🏆 Ranking</button>
+        <button className={`tab ${tab === 'resumen' ? 'active' : ''}`} onClick={() => setTab('resumen')}>Resumen</button>
       </div>
 
-      {/* Filtro de fecha personalizado */}
-      {tab === 'personalizado' && (
-        <div className="card" style={{ marginTop: '1.5rem', padding: '1rem' }}>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div>
-              <label className="label" style={{ marginBottom: '0.25rem' }}>Fecha Inicio</label>
-              <input
-                type="date"
-                className="input"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                style={{ width: '180px' }}
-              />
+      {/* Ranking */}
+      {tab === 'ranking' && (
+        <>
+          {/* Selector de período */}
+          <div className="card" style={{ marginTop: '1.5rem', padding: '0.85rem 1.25rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.9rem', marginRight: '0.25rem' }}>Período:</span>
+              {[{val:'hoy',label:'Hoy'},{val:'semana',label:'Semana'},{val:'mes',label:'Mes'},{val:'todas',label:'Todas'}].map(({val,label}) => (
+                <button key={val} className={`btn btn-sm ${periodoRanking === val ? 'btn-primary' : 'btn-outline'}`} onClick={() => setPeriodoRanking(val)}>{label}</button>
+              ))}
+              <button className="btn btn-sm btn-outline" onClick={cargarRanking} style={{ marginLeft: 'auto' }}>
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{marginRight:'4px'}}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Actualizar
+              </button>
             </div>
-            <div>
-              <label className="label" style={{ marginBottom: '0.25rem' }}>Fecha Fin</label>
-              <input
-                type="date"
-                className="input"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                style={{ width: '180px' }}
-              />
-            </div>
-            <button 
-              className="btn btn-primary" 
-              onClick={cargarDatos}
-              style={{ marginTop: '1.5rem' }}
-            >
-              Aplicar Filtro
-            </button>
-            <button 
-              className="btn btn-outline" 
-              onClick={() => {
-                setFechaInicio('');
-                setFechaFin('');
-                cargarDatos();
-              }}
-              style={{ marginTop: '1.5rem' }}
-            >
-              Limpiar
-            </button>
           </div>
-        </div>
+
+          {loadingRanking ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>Calculando ranking…</div>
+          ) : rankingData.length === 0 ? (
+            <div className="card" style={{ marginTop: '1rem', textAlign: 'center', padding: '3rem', color: '#6b7280' }}>No hay ventas en este período.</div>
+          ) : (
+            <div className="card ranking-card" style={{ marginTop: '1rem', overflow: 'hidden' }}>
+              {/* Header degradado */}
+              <div className="ranking-header">
+                <div className="ranking-header-icon">🏆</div>
+                <div>
+                  <div className="ranking-header-title">Top Productos Más Vendidos</div>
+                  <div className="ranking-header-sub">
+                    {periodoRanking === 'hoy' ? 'Hoy' : periodoRanking === 'semana' ? 'Última Semana' : periodoRanking === 'mes' ? 'Último Mes' : 'Histórico'}
+                    {' · '}{rankingData.length} productos
+                  </div>
+                </div>
+              </div>
+
+              {/* Podio top 3 */}
+              {rankingData.length >= 3 && (
+                <div className="ranking-podio">
+                  {/* 2do lugar */}
+                  <div className="podio-item podio-2">
+                    <div className="podio-medal">🥈</div>
+                    <div className="podio-bar podio-bar-2"></div>
+                    <div className="podio-pos">2</div>
+                    <div className="podio-nombre">{rankingData[1].nombre.length > 22 ? rankingData[1].nombre.substring(0,22)+'…' : rankingData[1].nombre}</div>
+                    <div className="podio-cant">{rankingData[1].cantidad} uds</div>
+                  </div>
+                  {/* 1er lugar */}
+                  <div className="podio-item podio-1">
+                    <div className="podio-medal">🥇</div>
+                    <div className="podio-bar podio-bar-1"></div>
+                    <div className="podio-pos">1</div>
+                    <div className="podio-nombre">{rankingData[0].nombre.length > 22 ? rankingData[0].nombre.substring(0,22)+'…' : rankingData[0].nombre}</div>
+                    <div className="podio-cant">{rankingData[0].cantidad} uds</div>
+                  </div>
+                  {/* 3er lugar */}
+                  <div className="podio-item podio-3">
+                    <div className="podio-medal">🥉</div>
+                    <div className="podio-bar podio-bar-3"></div>
+                    <div className="podio-pos">3</div>
+                    <div className="podio-nombre">{rankingData[2].nombre.length > 22 ? rankingData[2].nombre.substring(0,22)+'…' : rankingData[2].nombre}</div>
+                    <div className="podio-cant">{rankingData[2].cantidad} uds</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabla completa */}
+              <div style={{ padding: '0 1.5rem 1.5rem' }}>
+                <table className="ranking-tabla">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '3rem' }}>#</th>
+                      <th>Producto</th>
+                      <th style={{ textAlign: 'center' }}>Unidades</th>
+                      <th style={{ textAlign: 'center' }}>Pedidos</th>
+                      <th style={{ textAlign: 'right' }}>Total $</th>
+                      <th style={{ width: '140px' }}>Popularidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankingData.map((p, i) => {
+                      const maxCant = rankingData[0].cantidad;
+                      const pct = Math.round((p.cantidad / maxCant) * 100);
+                      const medalEmoji = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
+                      const rowClass = i === 0 ? 'ranking-row-1' : i === 1 ? 'ranking-row-2' : i === 2 ? 'ranking-row-3' : '';
+                      return (
+                        <tr key={p.nombre} className={`ranking-row ${rowClass}`}>
+                          <td>
+                            <span className={`ranking-pos ranking-pos-${i < 3 ? i+1 : 'rest'}`}>
+                              {medalEmoji || (i + 1)}
+                            </span>
+                          </td>
+                          <td className="ranking-nombre">{p.nombre}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="ranking-badge-cant">{p.cantidad}</span>
+                          </td>
+                          <td style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.85rem' }}>{p.pedidos}</td>
+                          <td style={{ textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${p.ingresos.toFixed(2)}</td>
+                          <td>
+                            <div className="ranking-bar-wrap">
+                              <div className="ranking-bar-fill" style={{ width: `${pct}%`, background: i === 0 ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : i === 1 ? 'linear-gradient(90deg,#94a3b8,#cbd5e1)' : i === 2 ? 'linear-gradient(90deg,#b45309,#d97706)' : 'linear-gradient(90deg,#6366f1,#818cf8)' }}></div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Contenido según tab */}
-      {(tab === 'todas' || tab === 'hoy' || tab === 'semana' || tab === 'mes' || tab === 'personalizado') && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
+      {/* Historial unificado con selector de período */}
+      {tab === 'historial' && (
+        <>
+          <div className="card" style={{ marginTop: '1.5rem', padding: '0.85rem 1.25rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.9rem', marginRight: '0.25rem' }}>Período:</span>
+              {[{val:'hoy',label:'Hoy'},{val:'semana',label:'Semana'},{val:'mes',label:'Mes'},{val:'todas',label:'Todas'},{val:'personalizado',label:'Personalizado'}].map(({val,label}) => (
+                <button
+                  key={val}
+                  className={`btn btn-sm ${periodo === val ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setPeriodo(val)}
+                >
+                  {label}
+                </button>
+              ))}
+              {periodo === 'personalizado' && (
+                <>
+                  <input
+                    type="date"
+                    className="input"
+                    value={fechaInicio}
+                    onChange={(e) => setFechaInicio(e.target.value)}
+                    style={{ width: '160px', marginLeft: '0.5rem' }}
+                  />
+                  <span style={{ color: 'var(--text-secondary)' }}>→</span>
+                  <input
+                    type="date"
+                    className="input"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    style={{ width: '160px' }}
+                  />
+                  <button className="btn btn-sm btn-primary" onClick={cargarDatos}>Aplicar</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => { setFechaInicio(''); setFechaFin(''); }}>Limpiar</button>
+                </>
+              )}
+              {/* Botón Imprimir Detalle de Pedidos */}
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={imprimirDetallePedidos}
+                disabled={cargandoImpresion || ventas.length === 0}
+                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                {cargandoImpresion ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Cargando…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Imprimir Detalle
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: '1rem' }}>
           <div className="table-wrapper">
             <table>
               <thead>
@@ -421,14 +590,13 @@ function Ventas() {
                   <th>Fecha</th>
                   <th>Items</th>
                   <th>Total</th>
-                  <th>Método Pago</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {ventas.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
                       No hay ventas registradas
                     </td>
                   </tr>
@@ -439,11 +607,6 @@ function Ventas() {
                       <td>{formatearFecha(venta.created_at)}</td>
                       <td>{venta.items_count}</td>
                       <td><strong className="text-success">${parseFloat(venta.total).toFixed(2)}</strong></td>
-                      <td>
-                        <span className="badge badge-info">
-                          {venta.metodo_pago || 'Efectivo'}
-                        </span>
-                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           <button
@@ -467,10 +630,11 @@ function Ventas() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* Facturación y Ganancias */}
-      {tab === 'facturacion' && (
+      {tab === 'resumen' && (
         <>
           <div className="card" style={{ marginTop: '1.5rem', padding: '1rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -525,94 +689,29 @@ function Ventas() {
           </div>
 
           {ganancias && (
-            <div className="stats-grid" style={{ marginTop: '1.5rem' }}>
-              <div className="stat-card" style={{ backgroundColor: '#e8f5e9' }}>
-                <div className="stat-icon">💵</div>
-                <div className="stat-value" style={{ color: '#2e7d32' }}>
-                  ${parseFloat(ganancias.ingresos_totales).toFixed(2)}
-                </div>
-                <div className="stat-label">Ingresos Totales</div>
-              </div>
+            <>
 
-              <div className="stat-card" style={{ backgroundColor: '#fff3e0' }}>
-                <div className="stat-icon">📦</div>
-                <div className="stat-value" style={{ color: '#e65100' }}>
-                  ${parseFloat(ganancias.costos_totales).toFixed(2)}
-                </div>
-                <div className="stat-label">Costos Totales</div>
+              {/* Grilla uniforme de 7 tarjetas */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                {[
+                  { label: 'Ingresos Totales',   value: `$${parseFloat(ganancias.ingresos_totales).toFixed(2)}`,   bg: '#e8f5e9', color: '#2e7d32', icon: <svg width="20" height="20" fill="none" stroke="#2e7d32" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
+                  { label: 'Costos Totales',      value: `$${parseFloat(ganancias.costos_totales).toFixed(2)}`,    bg: '#fff3e0', color: '#e65100', icon: <svg width="20" height="20" fill="none" stroke="#e65100" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> },
+                  { label: 'Ganancia Neta',       value: `$${parseFloat(ganancias.ganancia_neta).toFixed(2)}`,     bg: '#e3f2fd', color: '#1565c0', icon: <svg width="20" height="20" fill="none" stroke="#1565c0" strokeWidth="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> },
+                  { label: 'Margen de Ganancia',  value: `${parseFloat(ganancias.margen_porcentaje).toFixed(1)}%`, bg: '#f3e5f5', color: '#6a1b9a', icon: <svg width="20" height="20" fill="none" stroke="#6a1b9a" strokeWidth="2" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg> },
+                  { label: 'Ventas Realizadas',   value: ganancias.total_ventas,                                   bg: '#ede9fe', color: '#4f46e5', icon: <svg width="20" height="20" fill="none" stroke="#4f46e5" strokeWidth="2" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg> },
+                  { label: 'Productos Vendidos',  value: ganancias.productos_vendidos,                             bg: '#e0f2f1', color: '#0f766e', icon: <svg width="20" height="20" fill="none" stroke="#0f766e" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> },
+                  { label: 'Ticket Promedio',     value: `$${ganancias.total_ventas > 0 ? (parseFloat(ganancias.ingresos_totales) / ganancias.total_ventas).toFixed(2) : '0.00'}`, bg: '#fef9c3', color: '#854d0e', icon: <svg width="20" height="20" fill="none" stroke="#854d0e" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
+                ].map(({ label, value, bg, color, icon }) => (
+                  <div key={label} style={{ background: bg, borderRadius: '10px', padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '110px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                    <div style={{ marginBottom: '0.4rem' }}>{icon}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '700', color, lineHeight: 1.2 }}>{value}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.3rem', fontWeight: '500' }}>{label}</div>
+                  </div>
+                ))}
               </div>
-
-              <div className="stat-card" style={{ backgroundColor: '#e3f2fd' }}>
-                <div className="stat-icon">💰</div>
-                <div className="stat-value" style={{ color: '#1565c0' }}>
-                  ${parseFloat(ganancias.ganancia_neta).toFixed(2)}
-                </div>
-                <div className="stat-label">Ganancia Neta</div>
-              </div>
-
-              <div className="stat-card" style={{ backgroundColor: '#f3e5f5' }}>
-                <div className="stat-icon">📊</div>
-                <div className="stat-value" style={{ color: '#6a1b9a' }}>
-                  {parseFloat(ganancias.margen_porcentaje).toFixed(2)}%
-                </div>
-                <div className="stat-label">Margen de Ganancia</div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon">🛒</div>
-                <div className="stat-value">{ganancias.total_ventas}</div>
-                <div className="stat-label">Ventas Realizadas</div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon">📦</div>
-                <div className="stat-value">{ganancias.productos_vendidos}</div>
-                <div className="stat-label">Productos Vendidos</div>
-              </div>
-            </div>
-          )}
-
-          {/* Botón para generar factura */}
-          {ganancias && (
-            <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-              <button 
-                className="btn btn-primary" 
-                onClick={abrirModalFactura}
-                style={{ fontSize: '1.1rem', padding: '0.8rem 2rem' }}
-              >
-                📄 Generar Factura A
-              </button>
-            </div>
+            </>
           )}
         </>
-      )}
-
-      {tab === 'estadisticas' && stats && (
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon">💰</div>
-            <div className="stat-value">${parseFloat(stats.ingresos_totales).toFixed(2)}</div>
-            <div className="stat-label">Ingresos Totales</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">🛒</div>
-            <div className="stat-value">{stats.total_ventas}</div>
-            <div className="stat-label">Ventas Realizadas</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📦</div>
-            <div className="stat-value">{stats.productos_vendidos}</div>
-            <div className="stat-label">Productos Vendidos</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📈</div>
-            <div className="stat-value">${parseFloat(stats.ticket_promedio).toFixed(2)}</div>
-            <div className="stat-label">Ticket Promedio</div>
-          </div>
-        </div>
       )}
 
       {/* Modal de detalle */}
@@ -629,10 +728,6 @@ function Ventas() {
                 <div className="info-row">
                   <span>Fecha:</span>
                   <span>{formatearFecha(ventaSeleccionada.created_at)}</span>
-                </div>
-                <div className="info-row">
-                  <span>Método de Pago:</span>
-                  <span className="badge badge-info">{ventaSeleccionada.metodo_pago}</span>
                 </div>
                 <div className="info-row">
                   <span>Total Items:</span>
@@ -670,324 +765,124 @@ function Ventas() {
         </div>
       )}
 
-      {/* Modal para datos de factura */}
-      {mostrarModalFactura && (
-        <div className="modal-overlay" onClick={cerrarModalFactura}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Datos para Factura A</h2>
-              <button className="modal-close" onClick={cerrarModalFactura}>×</button>
-            </div>
-            
-            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '2rem' }}>
-              {/* Datos de la Empresa */}
-              <div style={{ marginBottom: '2.5rem' }}>
-                <h3 style={{ marginBottom: '1.5rem', color: '#2c3e50', borderBottom: '2px solid #3498db', paddingBottom: '0.5rem', fontSize: '1.2rem' }}>
-                  📋 Datos de la Empresa (Emisor)
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                  <div>
-                    <label className="label">Razón Social *</label>
-                    <input
-                      type="text"
-                      className={`input ${erroresFactura.empresaRazonSocial ? 'input-error' : ''}`}
-                      value={datosEmpresa.razonSocial}
-                      onChange={(e) => {
-                        setDatosEmpresa({...datosEmpresa, razonSocial: e.target.value});
-                        if (erroresFactura.empresaRazonSocial) {
-                          setErroresFactura({...erroresFactura, empresaRazonSocial: undefined});
-                        }
-                      }}
-                      placeholder="Empresa S.R.L."
-                    />
-                    {erroresFactura.empresaRazonSocial && (
-                      <span className="error-message">{erroresFactura.empresaRazonSocial}</span>
-                    )}
-                  </div>
-                  <div>
-                    <label className="label">CUIT *</label>
-                    <input
-                      type="text"
-                      className={`input ${erroresFactura.empresaCuit ? 'input-error' : ''}`}
-                      value={datosEmpresa.cuit}
-                      onChange={(e) => {
-                        setDatosEmpresa({...datosEmpresa, cuit: e.target.value});
-                        if (erroresFactura.empresaCuit) {
-                          setErroresFactura({...erroresFactura, empresaCuit: undefined});
-                        }
-                      }}
-                      placeholder="20-12345678-3"
-                    />
-                    {erroresFactura.empresaCuit && (
-                      <span className="error-message">{erroresFactura.empresaCuit}</span>
-                    )}
-                  </div>
-                  <div>
-                    <label className="label">Domicilio</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.domicilio}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, domicilio: e.target.value})}
-                      placeholder="Av. Siempre Viva 123"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Localidad</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.localidad}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, localidad: e.target.value})}
-                      placeholder="Buenos Aires"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Provincia</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.provincia}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, provincia: e.target.value})}
-                      placeholder="Buenos Aires"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Teléfono</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        className="input"
-                        value={datosEmpresa.codigoArea}
-                        onChange={(e) => setDatosEmpresa({...datosEmpresa, codigoArea: e.target.value})}
-                        placeholder="011"
-                        style={{ width: '70px' }}
-                      />
-                      <input
-                        type="text"
-                        className="input"
-                        value={datosEmpresa.telefono}
-                        onChange={(e) => setDatosEmpresa({...datosEmpresa, telefono: e.target.value})}
-                        placeholder="1234-5678"
-                        style={{ flex: 1 }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Ingresos Brutos</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.ingresosBrutos}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, ingresosBrutos: e.target.value})}
-                      placeholder="20-12345678-3"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Inicio de Actividades</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={datosEmpresa.inicioActividades}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, inicioActividades: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Punto de Venta</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.puntoVenta}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, puntoVenta: e.target.value})}
-                      placeholder="0001"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Número de Factura</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.numeroFactura}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, numeroFactura: e.target.value})}
-                      placeholder="00000001"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">CAE (opcional)</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosEmpresa.cae}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, cae: e.target.value})}
-                      placeholder="1234567890"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Vto. CAE (opcional)</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={datosEmpresa.vencimientoCAE}
-                      onChange={(e) => setDatosEmpresa({...datosEmpresa, vencimientoCAE: e.target.value})}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Datos del Cliente */}
-              <div>
-                <h3 style={{ marginBottom: '1.5rem', color: '#2c3e50', borderBottom: '2px solid #3498db', paddingBottom: '0.5rem', fontSize: '1.2rem' }}>
-                  👤 Datos del Cliente (Receptor)
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                  <div>
-                    <label className="label">Razón Social *</label>
-                    <input
-                      type="text"
-                      className={`input ${erroresFactura.clienteRazonSocial ? 'input-error' : ''}`}
-                      value={datosCliente.razonSocial}
-                      onChange={(e) => {
-                        setDatosCliente({...datosCliente, razonSocial: e.target.value});
-                        if (erroresFactura.clienteRazonSocial) {
-                          setErroresFactura({...erroresFactura, clienteRazonSocial: undefined});
-                        }
-                      }}
-                      placeholder="Cliente S.A."
-                    />
-                    {erroresFactura.clienteRazonSocial && (
-                      <span className="error-message">{erroresFactura.clienteRazonSocial}</span>
-                    )}
-                  </div>
-                  <div>
-                    <label className="label">CUIT *</label>
-                    <input
-                      type="text"
-                      className={`input ${erroresFactura.clienteCuit ? 'input-error' : ''}`}
-                      value={datosCliente.cuit}
-                      onChange={(e) => {
-                        setDatosCliente({...datosCliente, cuit: e.target.value});
-                        if (erroresFactura.clienteCuit) {
-                          setErroresFactura({...erroresFactura, clienteCuit: undefined});
-                        }
-                      }}
-                      placeholder="20-98765432-1"
-                    />
-                    {erroresFactura.clienteCuit && (
-                      <span className="error-message">{erroresFactura.clienteCuit}</span>
-                    )}
-                  </div>
-                  <div>
-                    <label className="label">Domicilio</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosCliente.domicilio}
-                      onChange={(e) => setDatosCliente({...datosCliente, domicilio: e.target.value})}
-                      placeholder="Calle Cliente 456"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Localidad</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosCliente.localidad}
-                      onChange={(e) => setDatosCliente({...datosCliente, localidad: e.target.value})}
-                      placeholder="Rosario"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Provincia</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosCliente.provincia}
-                      onChange={(e) => setDatosCliente({...datosCliente, provincia: e.target.value})}
-                      placeholder="Santa Fe"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Teléfono</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={datosCliente.telefono}
-                      onChange={(e) => setDatosCliente({...datosCliente, telefono: e.target.value})}
-                      placeholder="0341-1234567"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Condición IVA</label>
-                    <select
-                      className="input"
-                      value={datosCliente.condicionIVA}
-                      onChange={(e) => setDatosCliente({...datosCliente, condicionIVA: e.target.value})}
-                    >
-                      <option value="Responsable Inscripto">Responsable Inscripto</option>
-                      <option value="Monotributista">Monotributista</option>
-                      <option value="Consumidor Final">Consumidor Final</option>
-                      <option value="Exento">Exento</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Condición de Venta</label>
-                    <select
-                      className="input"
-                      value={datosCliente.condicionVenta}
-                      onChange={(e) => setDatosCliente({...datosCliente, condicionVenta: e.target.value})}
-                    >
-                      <option value="Contado">Contado</option>
-                      <option value="Cuenta Corriente">Cuenta Corriente</option>
-                      <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={cerrarModalFactura}>
-                Cancelar
-              </button>
-              <button className="btn btn-primary" onClick={generarFactura}>
-                Generar Factura
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Vista de Factura para imprimir */}
-      {mostrarFactura && (
-        <div className="modal-overlay" onClick={cerrarVistaFactura}>
-          <div className="modal-content" style={{ maxWidth: '230mm', width: '95%', maxHeight: '95vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      {/* Modal de impresión de detalle de pedidos */}
+      {mostrarImpresion && (
+        <div className="modal-overlay" onClick={() => setMostrarImpresion(false)}>
+          <div className="modal-content" style={{ maxWidth: '800px', width: '95%', maxHeight: '95vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header no-print">
-              <h2>Vista Previa de Factura</h2>
-              <button className="modal-close" onClick={cerrarVistaFactura}>×</button>
-            </div>
-            
-            <div className="modal-body" style={{ padding: 0 }}>
-              <FacturaA 
-                ref={facturaRef}
-                datosEmpresa={datosEmpresa}
-                datosCliente={datosCliente}
-                ventas={ventasFactura}
-                totales={totalesFactura}
-              />
+              <h2>Detalle de Pedidos</h2>
+              <button className="modal-close" onClick={() => setMostrarImpresion(false)}>×</button>
             </div>
 
-            <div className="modal-footer no-print">
-              <button className="btn btn-secondary" onClick={cerrarVistaFactura}>
+            <div ref={impresionRef} className="detalle-pedidos-print" style={{ padding: '1.5rem' }}>
+              {/* Encabezado visible en pantalla (no se imprime) */}
+              <div className="no-print" style={{ textAlign: 'center', marginBottom: '1.5rem', borderBottom: '2px solid #374151', paddingBottom: '1rem' }}>
+                <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#111827' }}>Detalle de Pedidos</h2>
+                <p style={{ color: '#6b7280', margin: '0.3rem 0 0', fontSize: '0.9rem' }}>
+                  Período: {periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Última Semana' : periodo === 'mes' ? 'Último Mes' : periodo === 'todas' ? 'Todas' : `${fechaInicio || '—'} → ${fechaFin || '—'}`}
+                  {' · '}{ventasImpresion.length} pedido(s)
+                  {' · '}Generado: {new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+
+              {ventasImpresion.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#6b7280', padding: '2rem 0' }}>No hay pedidos registrados en este período.</p>
+              ) : (
+                <>
+                  {/* Resumen por Producto — solo pantalla */}
+                  <div className="no-print">
+                    {(() => {
+                      const resumen = {};
+                      for (const v of ventasImpresion) {
+                        if (v.items) {
+                          for (const item of v.items) {
+                            const k = item.producto_nombre;
+                            if (!resumen[k]) resumen[k] = { cantidad: 0, total: 0 };
+                            resumen[k].cantidad += Number(item.cantidad);
+                            resumen[k].total += Number(item.subtotal);
+                          }
+                        }
+                      }
+                      const filas = Object.entries(resumen).sort((a, b) => b[1].cantidad - a[1].cantidad);
+                      if (!filas.length) return <p style={{ textAlign: 'center', color: '#6b7280', padding: '1rem 0' }}>Sin detalle de productos disponible.</p>;
+                      return (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: '#f3f4f6' }}>
+                              <th style={{ padding: '0.5rem 1rem', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '700', color: '#374151' }}>Producto</th>
+                              <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: '2px solid #e5e7eb', fontWeight: '700', color: '#374151' }}>Cant. Total</th>
+                              <th style={{ padding: '0.5rem 1rem', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '700', color: '#374151' }}>Total $</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filas.map(([nombre, d]) => (
+                              <tr key={nombre} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                <td style={{ padding: '0.5rem 1rem' }}>{nombre}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', fontWeight: '600' }}>{d.cantidad}</td>
+                                <td style={{ padding: '0.5rem 1rem', textAlign: 'right' }}>${d.total.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                    {/* Totales por turno en pantalla */}
+                    {(() => {
+                      const { mañana, noche, otras } = clasificarTurnos(ventasImpresion);
+                      const totalMañana = mañana.reduce((a, v) => a + parseFloat(v.total || 0), 0);
+                      const totalNoche  = noche.reduce((a, v) => a + parseFloat(v.total || 0), 0);
+                      const totalDia    = ventasImpresion.reduce((a, v) => a + parseFloat(v.total || 0), 0);
+                      const totalOtras  = otras.reduce((a, v) => a + parseFloat(v.total || 0), 0);
+                      return (
+                        <div style={{ marginTop: '1.25rem', borderTop: '2px solid #374151', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fef9c3', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                            <div>
+                              <span style={{ fontWeight: '700', fontSize: '0.95rem', color: '#78350f' }}>Turno Mañana</span>
+                              <span style={{ fontSize: '0.78rem', color: '#92400e', marginLeft: '0.5rem' }}>08:00 – 13:30 · {mañana.length} ped.</span>
+                            </div>
+                            <strong style={{ fontSize: '1.05rem', color: '#78350f' }}>${totalMañana.toFixed(2)}</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ede9fe', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                            <div>
+                              <span style={{ fontWeight: '700', fontSize: '0.95rem', color: '#3730a3' }}>Turno Tarde</span>
+                              <span style={{ fontSize: '0.78rem', color: '#4338ca', marginLeft: '0.5rem' }}>17:00 – 21:00 · {noche.length} ped.</span>
+                            </div>
+                            <strong style={{ fontSize: '1.05rem', color: '#3730a3' }}>${totalNoche.toFixed(2)}</strong>
+                          </div>
+                          {otras.length > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f3f4f6', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                              <div>
+                                <span style={{ fontWeight: '700', fontSize: '0.95rem', color: '#374151' }}>Fuera de turno</span>
+                                <span style={{ fontSize: '0.78rem', color: '#6b7280', marginLeft: '0.5rem' }}>{otras.length} ped.</span>
+                              </div>
+                              <strong style={{ fontSize: '1.05rem', color: '#374151' }}>${totalOtras.toFixed(2)}</strong>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111827', borderRadius: '8px', padding: '0.75rem 1rem', marginTop: '0.25rem' }}>
+                            <span style={{ fontWeight: '900', fontSize: '1rem', color: '#fff', letterSpacing: '0.5px' }}>TOTAL DEL DÍA</span>
+                            <strong style={{ fontSize: '1.25rem', color: '#fff' }}>${totalDia.toFixed(2)}</strong>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer no-print" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setMostrarImpresion(false)}>
                 Cerrar
               </button>
-              <button className="btn btn-primary" onClick={compartirFactura}>
-                📤 Compartir
-              </button>
-              <button className="btn btn-primary" onClick={guardarComoPDF}>
-                📄 Guardar PDF
-              </button>
-              <button className="btn btn-primary" onClick={imprimirFactura}>
-                🖨️ Imprimir
+              <button
+                className="btn btn-primary"
+                onClick={() => imprimirTotalTicket(ventasImpresion, periodo, fechaInicio, fechaFin)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Imprimir
               </button>
             </div>
           </div>

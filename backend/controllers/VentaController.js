@@ -16,7 +16,7 @@ class VentaController {
         });
       }
 
-      const { items, metodo_pago } = req.body;
+      const { items } = req.body;
 
       // Validar que hay items
       if (!items || items.length === 0) {
@@ -26,15 +26,48 @@ class VentaController {
         });
       }
 
-      // Validar y preparar items
+      // Validar y preparar items — batch fetch solo de items normales (no especiales)
+      const idsNormales = items
+        .filter(i => !i.es_especial)
+        .map(i => parseInt(i.producto_id));
+      const productosArr = idsNormales.length > 0
+        ? await ProductoModel.getByIds(idsNormales)
+        : [];
+      const productosMap = new Map(productosArr.map(p => [p.id, p]));
+
       let total = 0;
       let itemsCount = 0;
       const ventaItems = [];
 
       for (const item of items) {
-        // Verificar que el producto existe
-        const producto = await ProductoModel.getById(item.producto_id);
-        
+
+        // ── Item especial (Varios): precio y nombre vienen del cliente ──
+        if (item.es_especial) {
+          const precioUnitario = parseFloat(item.precio_unitario);
+          const cantidad = parseInt(item.cantidad);
+          if (!item.producto_nombre || isNaN(precioUnitario) || precioUnitario <= 0 || cantidad < 1) {
+            return res.status(400).json({
+              success: false,
+              message: 'Item especial inválido: se requiere producto_nombre, precio_unitario > 0 y cantidad >= 1'
+            });
+          }
+          const subtotal = parseFloat((precioUnitario * cantidad).toFixed(2));
+          ventaItems.push({
+            producto_id: null,
+            producto_nombre: item.producto_nombre,
+            producto_codigo: null,
+            cantidad,
+            precio_unitario: precioUnitario,
+            subtotal
+          });
+          total += subtotal;
+          itemsCount += cantidad;
+          continue;
+        }
+
+        // ── Item normal: validar contra la base de datos ──
+        const producto = productosMap.get(parseInt(item.producto_id));
+
         if (!producto) {
           return res.status(400).json({
             success: false,
@@ -50,7 +83,7 @@ class VentaController {
         }
 
         const subtotal = parseFloat(producto.precio) * parseInt(item.cantidad);
-        
+
         ventaItems.push({
           producto_id: producto.id,
           producto_nombre: producto.nombre,
@@ -67,8 +100,7 @@ class VentaController {
       // Crear venta
       const ventaData = {
         total: parseFloat(total.toFixed(2)),
-        items_count: itemsCount,
-        metodo_pago: metodo_pago || 'efectivo'
+        items_count: itemsCount
       };
 
       const venta = await VentaModel.create(ventaData, ventaItems);
@@ -94,6 +126,7 @@ class VentaController {
     try {
       const limit = parseInt(req.query.limit) || 50;
       const offset = parseInt(req.query.offset) || 0;
+      const includeItems = req.query.includeItems === 'true';
       
       // Filtros de fecha
       const filtros = {
@@ -102,7 +135,7 @@ class VentaController {
         periodo: req.query.periodo // 'hoy', 'semana', 'mes'
       };
       
-      const ventas = await VentaModel.getAll(limit, offset, filtros);
+      const ventas = await VentaModel.getAll(limit, offset, filtros, { includeItems });
       
       res.json({
         success: true,
@@ -148,7 +181,7 @@ class VentaController {
   // GET /api/ventas/today - Obtener ventas de hoy
   static async getToday(req, res) {
     try {
-      const ventas = await VentaModel.getToday();
+      const ventas = await VentaModel.getToday({ includeItems: req.query.includeItems === 'true' });
       
       res.json({
         success: true,
@@ -168,7 +201,7 @@ class VentaController {
   // GET /api/ventas/weekly - Obtener ventas de la semana
   static async getWeekly(req, res) {
     try {
-      const ventas = await VentaModel.getWeekly();
+      const ventas = await VentaModel.getWeekly({ includeItems: req.query.includeItems === 'true' });
       
       res.json({
         success: true,
@@ -188,7 +221,7 @@ class VentaController {
   // GET /api/ventas/monthly - Obtener ventas del mes
   static async getMonthly(req, res) {
     try {
-      const ventas = await VentaModel.getMonthly();
+      const ventas = await VentaModel.getMonthly({ includeItems: req.query.includeItems === 'true' });
       
       res.json({
         success: true,

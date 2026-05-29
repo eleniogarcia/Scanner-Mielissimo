@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 12000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -31,12 +32,31 @@ export const productosAPI = {
   
   search: (query) => 
     api.get(`/productos/search?q=${encodeURIComponent(query)}`),
+
+  getVencimientos: (filtros = {}) => {
+    const params = new URLSearchParams();
+    if (filtros.estado) params.append('estado', filtros.estado);
+    if (filtros.desde) params.append('desde', filtros.desde);
+    if (filtros.hasta) params.append('hasta', filtros.hasta);
+    if (filtros.dias !== undefined && filtros.dias !== null && filtros.dias !== '') {
+      params.append('dias', filtros.dias);
+    }
+    if (filtros.q) params.append('q', filtros.q);
+    if (filtros.limit !== undefined && filtros.limit !== null) params.append('limit', filtros.limit);
+    if (filtros.offset !== undefined && filtros.offset !== null) params.append('offset', filtros.offset);
+    if (filtros.includeInactive) params.append('includeInactive', 'true');
+    const query = params.toString();
+    return api.get(`/productos/vencimientos${query ? `?${query}` : ''}`);
+  },
+
+  getVencimientosResumen: (includeInactive = false) =>
+    api.get(`/productos/vencimientos/resumen${includeInactive ? '?includeInactive=true' : ''}`),
   
   create: (data) => 
     api.post('/productos', data),
   
-  createBulk: (productos) =>
-    api.post('/productos/bulk', { productos }),
+  createBulk: (productos, updateExisting = false) =>
+    api.post('/productos/bulk', { productos, updateExisting }),
   
   update: (id, data) => 
     api.put(`/productos/${id}`, data),
@@ -47,20 +67,25 @@ export const productosAPI = {
 
 // Ventas
 export const ventasAPI = {
-  getAll: (limit = 50, offset = 0) => 
-    api.get(`/ventas?limit=${limit}&offset=${offset}`),
+  getAll: (limit = 50, offset = 0, startDate = null, endDate = null, includeItems = false) => {
+    const params = new URLSearchParams({ limit, offset });
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (includeItems) params.append('includeItems', 'true');
+    return api.get(`/ventas?${params.toString()}`);
+  },
   
   getById: (id) => 
     api.get(`/ventas/${id}`),
   
-  getToday: () => 
-    api.get('/ventas/today'),
+  getToday: (includeItems = false) => 
+    api.get(`/ventas/today${includeItems ? '?includeItems=true' : ''}`),
   
-  getWeekly: () => 
-    api.get('/ventas/weekly'),
+  getWeekly: (includeItems = false) => 
+    api.get(`/ventas/weekly${includeItems ? '?includeItems=true' : ''}`),
   
-  getMonthly: () => 
-    api.get('/ventas/monthly'),
+  getMonthly: (includeItems = false) => 
+    api.get(`/ventas/monthly${includeItems ? '?includeItems=true' : ''}`),
   
   getStats: (startDate, endDate) => {
     let url = '/ventas/stats';

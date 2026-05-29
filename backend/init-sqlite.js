@@ -15,6 +15,7 @@ db.exec(`
     codigo TEXT UNIQUE,
     precio REAL NOT NULL CHECK (precio >= 0),
     costo REAL DEFAULT 0 CHECK (costo >= 0),
+    fecha_vencimiento TEXT,
     stock INTEGER DEFAULT 0 CHECK (stock >= 0),
     fabricante TEXT,
     precio_actualizado_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -55,6 +56,7 @@ db.exec(`
 // Crear índices
 db.exec(`CREATE INDEX idx_productos_codigo ON productos(codigo)`);
 db.exec(`CREATE INDEX idx_productos_activo ON productos(activo)`);
+db.exec(`CREATE INDEX idx_productos_fecha_vencimiento ON productos(fecha_vencimiento)`);
 db.exec(`CREATE INDEX idx_ventas_fecha ON ventas(created_at)`);
 db.exec(`CREATE INDEX idx_venta_items_venta ON venta_items(venta_id)`);
 db.exec(`CREATE INDEX idx_venta_items_producto ON venta_items(producto_id)`);

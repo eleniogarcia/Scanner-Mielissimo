@@ -1,0 +1,253 @@
+.vencimientos-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.vencimientos-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.vencimientos-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.vencimientos-alertas-mes {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.kpi-card {
+  border-radius: 0.8rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+button.kpi-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+button.kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.kpi-active {
+  box-shadow: var(--shadow-md);
+  outline: 2px solid rgba(17, 24, 39, 0.15);
+}
+
+.kpi-card strong {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.kpi-danger {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #9f1239;
+}
+
+.kpi-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.kpi-soft-warning {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.kpi-success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.kpi-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
+}
+
+.vencimientos-filtros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.vencimientos-filtros-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vencimientos-filtros-title {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.vencimientos-filtros-subtitle {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.vencimientos-checkbox-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
+.vencimientos-check-label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.vencimientos-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .vencimientos-filtros-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vencimientos-presets {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .vencimientos-filtros-grid {
+    grid-template-columns: 1fr;
+  }
+
+.vencimientos-filtros-header {
+  flex-direction: column;
+  align-items: flex-start;
+  }
+}
+
+/* ── Botón de ocultar/✕ en cada fila ── */
+.venc-btn-ocultar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1.5px solid #e2e5ea;
+  background: #f9f9f9;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.venc-btn-ocultar:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+  transform: scale(1.1);
+}
+
+.venc-btn-ocultar.venc-btn-restaurar {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+  font-size: 0.9rem;
+}
+
+.venc-btn-ocultar.venc-btn-restaurar:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: scale(1.1);
+}
+
+/* ── Fila oculta (si se muestra con "mostrar ocultos") ── */
+.venc-fila-oculta {
+  opacity: 0.38;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(0,0,0,0.025) 6px,
+    rgba(0,0,0,0.025) 12px
+  );
+}
+
+/* ── Barra de ocultos ── */
+.venc-ocultos-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.venc-ocultos-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.venc-restaurar-btn {
+  color: #2563eb !important;
+  border-color: #bfdbfe !important;
+}
+
+.venc-restaurar-btn:hover {
+  background: #eff6ff !important;
+}
+
+/* ── Botón como link (dentro de la tabla vacía) ── */
+.venc-link-btn {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  font-family: inherit;
+}
+
+.venc-link-btn:hover {
+  color: #3730a3;
+}

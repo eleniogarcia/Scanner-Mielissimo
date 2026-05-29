@@ -6,6 +6,8 @@ const { productoValidation } = require('../middleware/validation');
 // Rutas de productos
 router.get('/', ProductoController.getAll);
 router.get('/search', ProductoController.search);
+router.get('/vencimientos/resumen', ProductoController.getVencimientosResumen);
+router.get('/vencimientos', ProductoController.getVencimientos);
 router.get('/codigo/:codigo', ProductoController.getByCodigo);
 router.get('/:id', ProductoController.getById);
 router.post('/', productoValidation.create, ProductoController.create);

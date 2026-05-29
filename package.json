@@ -10,13 +10,17 @@
     "dev:frontend": "cd frontend && npm run dev",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "build:frontend": "cd frontend && npm run build",
-    "build": "npm run build:frontend && electron-builder",
-    "build:win": "npm run build:frontend && electron-builder --win",
+    "rebuild:backend": "cd backend && npx electron-rebuild -f -w better-sqlite3 -v 40.6.0",
+    "build": "npm run build:frontend && npm run rebuild:backend && electron-builder",
+    "build:win": "npm run build:frontend && npm run rebuild:backend && electron-builder --win",
     "postinstall": "cd backend && npm install && cd ../frontend && npm install"
   },
   "build": {
     "appId": "com.mielissimo.pos",
-    "productName": "Mielissimo POS",
+    "productName": "Mielissimo",
+    "artifactName": "Mielissimo Setup ${version}.${ext}",
+    "asar": false,
+    "buildDependenciesFromSource": true,
     "directories": {
       "output": "dist-electron"
     },
@@ -25,39 +29,45 @@
       "backend/**/*",
       "!backend/node_modules/@types/**/*",
       "!backend/**/*.log",
-      "frontend/dist/**/*",
-      "node_modules/**/*",
-      "!node_modules/**/{CHANGELOG.md,README.md,readme.md,changelog.md}",
-      "!node_modules/**/{test,tests,__tests__}/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "assets",
-        "to": "assets"
-      }
+      "frontend/dist/**/*"
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "executableName": "Mielissimo",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mielissimo POS",
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico"
+      "shortcutName": "Mielissimo"
     }
   },
-  "keywords": ["pos", "punto de venta", "mielissimo", "ventas", "electron"],
+  "keywords": [
+    "pos",
+    "punto de venta",
+    "mielissimo",
+    "ventas",
+    "electron"
+  ],
   "author": "Mielissimo",
   "license": "MIT",
-  "devDependencies": {},
-  "dependencies": {}
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^40.6.0",
+    "electron-builder": "^26.8.1",
+    "wait-on": "^9.0.4"
+  },
+  "dependencies": {
+    "html2canvas": "^1.4.1"
+  }
 }

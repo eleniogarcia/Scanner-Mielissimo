@@ -119,6 +119,59 @@ class ProductoController {
     }
   }
 
+  // GET /api/productos/vencimientos - Listado de productos por fecha de vencimiento
+  static async getVencimientos(req, res) {
+    try {
+      const filtros = {
+        includeInactive: req.query.includeInactive === 'true',
+        estado: req.query.estado || 'todos',
+        desde: req.query.desde || null,
+        hasta: req.query.hasta || null,
+        dias: req.query.dias || null,
+        q: req.query.q || null,
+        limit: req.query.limit || null,
+        offset: req.query.offset || 0
+      };
+
+      const result = await ProductoModel.getVencimientos(filtros);
+
+      res.json({
+        success: true,
+        count: result.items.length,
+        total: result.total,
+        filters: filtros,
+        data: result.items
+      });
+    } catch (error) {
+      console.error('Error obteniendo vencimientos:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener vencimientos',
+        error: error.message
+      });
+    }
+  }
+
+  // GET /api/productos/vencimientos/resumen - Contadores globales de vencimientos
+  static async getVencimientosResumen(req, res) {
+    try {
+      const includeInactive = req.query.includeInactive === 'true';
+      const resumen = await ProductoModel.getVencimientosResumen({ includeInactive });
+
+      res.json({
+        success: true,
+        data: resumen
+      });
+    } catch (error) {
+      console.error('Error obteniendo resumen de vencimientos:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener resumen de vencimientos',
+        error: error.message
+      });
+    }
+  }
+
   // POST /api/productos - Crear producto
   static async create(req, res) {
     try {
@@ -266,7 +319,7 @@ class ProductoController {
   // POST /api/productos/bulk - Carga masiva de productos
   static async createBulk(req, res) {
     try {
-      const { productos } = req.body;
+      const { productos, updateExisting = false } = req.body;
 
       // Validar que se envió un array
       if (!Array.isArray(productos) || productos.length === 0) {
@@ -284,13 +337,13 @@ class ProductoController {
         });
       }
 
-      const resultado = await ProductoModel.createBulk(productos);
+      const resultado = await ProductoModel.createBulk(productos, updateExisting);
 
       // Si todos fallaron
-      if (resultado.creados === 0) {
+      if (resultado.creados === 0 && resultado.actualizados === 0) {
         return res.status(400).json({
           success: false,
-          message: 'No se pudo crear ningún producto',
+          message: 'No se pudo crear ni actualizar ningún producto',
           data: resultado
         });
       }
@@ -299,7 +352,7 @@ class ProductoController {
       if (resultado.errores.length > 0) {
         return res.status(207).json({
           success: true,
-          message: `Se crearon ${resultado.creados} de ${resultado.total} productos`,
+          message: `Se procesaron ${resultado.creados + resultado.actualizados} de ${resultado.total} productos`,
           data: resultado
         });
       }
@@ -307,7 +360,7 @@ class ProductoController {
       // Todos exitosos
       res.status(201).json({
         success: true,
-        message: `Se crearon ${resultado.creados} productos exitosamente`,
+        message: `Se procesaron ${resultado.creados + resultado.actualizados} productos exitosamente`,
         data: resultado
       });
 

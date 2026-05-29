@@ -23,9 +23,60 @@ cd ScannerMielissimo
 
 ---
 
-## 🔧 PASO 2: Instalar Dependencias en la Nueva Computadora
+## ⚙️ PASO 2: Configurar PowerShell (IMPORTANTE)
 
-Abre **PowerShell** o **CMD** en la carpeta del proyecto:
+Si recibes el error: 
+- **"la ejecución de scripts está deshabilitada en este sistema"**, o
+- **"no se reconoce como un comando interno o externo"**
+
+**Significa que estás en CMD en lugar de PowerShell, o PowerShell está bloqueado.**
+
+### ⚠️ CÓMO ABRIR POWERSHELL COMO ADMINISTRADOR (PASO A PASO):
+
+1. **Presiona la tecla Windows** en tu teclado (la tecla con el logo de Windows)
+
+2. **Escribe:** `powershell` (verás aparecer resultados de búsqueda)
+
+3. **Busca "Windows PowerShell"** en los resultados (tiene un logo azul)
+   - ❌ NO uses "Símbolo del sistema" o "CMD" (logo negro)
+   - ✅ SÍ usa "Windows PowerShell" (logo azul)
+
+4. **Haz clic DERECHO** sobre **"Windows PowerShell"**
+
+5. En el menú que aparece, selecciona **"Ejecutar como administrador"**
+
+6. Windows te preguntará si permites que la app haga cambios. Haz clic en **"Sí"**
+
+7. Se abrirá una ventana **AZUL** (no negra). En el título debe decir **"Administrador: Windows PowerShell"**
+
+### AHORA SÍ, EJECUTA EL COMANDO:
+
+8. **Copia y pega este comando** en la ventana azul:
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+9. Presiona **Enter**
+
+10. Te preguntará si quieres cambiar la directiva. Escribe **S** y presiona **Enter**
+
+11. **Verifica que funcionó** ejecutando:
+    ```powershell
+    Get-ExecutionPolicy
+    ```
+    Debe responder: `RemoteSigned`
+
+12. **Cierra esta ventana** de PowerShell
+
+13. **Abre PowerShell NORMAL** (sin administrador) navegando a tu carpeta del proyecto para continuar
+
+**✅ Ahora npm install y todos los comandos funcionarán correctamente**
+
+---
+
+## 🔧 PASO 3: Instalar Dependencias en la Nueva Computadora
+
+Abre **PowerShell** (normal, no como administrador) en la carpeta del proyecto:
 
 ```powershell
 # Instalar dependencias del backend
@@ -44,7 +95,7 @@ cd ..
 
 ---
 
-## 💾 PASO 3: Cambiar de PostgreSQL a SQLite
+## 💾 PASO 4: Cambiar de PostgreSQL a SQLite
 
 SQLite no requiere servidor, todo se guarda en un archivo local.
 
@@ -243,7 +294,7 @@ if (isProduction) {
 
 ---
 
-## 📦 PASO 4: Instalar y Configurar Electron
+## 📦 PASO 5: Instalar y Configurar Electron
 
 ### 4.1. Instalar Electron y herramientas de empaquetado
 
@@ -401,7 +452,7 @@ app.on('before-quit', () => {
 
 ---
 
-## 🎨 PASO 5: Crear Icono para la Aplicación
+## 🎨 PASO 6: Crear Icono para la Aplicación
 
 1. Crea una carpeta `assets` en la raíz del proyecto
 2. Coloca un icono en formato `.ico` (256x256 o 512x512 píxeles) llamado `icon.ico`
@@ -411,7 +462,7 @@ app.on('before-quit', () => {
 
 ---
 
-## 🏗️ PASO 6: Inicializar la Base de Datos SQLite
+## 🏗️ PASO 7: Inicializar la Base de Datos SQLite
 
 ```powershell
 cd backend
@@ -427,7 +478,7 @@ Deberías ver:
 
 ---
 
-## 🧪 PASO 7: Probar la Aplicación en Modo Desarrollo
+## 🧪 PASO 8: Probar la Aplicación en Modo Desarrollo
 
 ### Opción A: Probar con Electron (Recomendado)
 
@@ -455,7 +506,7 @@ npm run dev
 
 ---
 
-## 📦 PASO 8: Construir el Instalador
+## 📦 PASO 9: Construir el Instalador
 
 ### 8.1. Compilar el frontend
 
@@ -479,7 +530,7 @@ Busca el archivo: `Mielissimo POS Setup 1.0.0.exe`
 
 ---
 
-## 💿 PASO 9: Instalar en Otra Computadora
+## 💿 PASO 10: Instalar en Otra Computadora
 
 1. **Copia el archivo** `Mielissimo POS Setup 1.0.0.exe` a una USB
 2. **En la otra computadora:**
@@ -510,6 +561,18 @@ C:\Users\[NombreUsuario]\AppData\Roaming\MielissimoPOS\mielissimo.db
 ---
 
 ## 🔧 Solución de Problemas
+
+### Error: "la ejecución de scripts está deshabilitada" ⚠️ MÁS COMÚN
+**Error completo:** `npm : No se puede cargar el archivo... porque la ejecución de scripts está deshabilitada en este sistema`
+
+**Solución:**
+1. Abre PowerShell como **Administrador**
+2. Ejecuta: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+3. Presiona "S" para confirmar
+4. Cierra PowerShell y ábrelo de nuevo (sin permisos de administrador)
+5. Ahora `npm install` funcionará
+
+**Explicación:** Windows bloquea la ejecución de scripts por seguridad. Este comando permite ejecutar scripts de npm.
 
 ### Error: "node no se reconoce como comando"
 **Solución:** Instala Node.js desde [nodejs.org](https://nodejs.org)

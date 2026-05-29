@@ -13,7 +13,29 @@
 ### 2. Copiar proyecto
 Copia toda la carpeta `ScannerMielissimo` a la nueva computadora
 
-### 3. Instalar dependencias
+### 3. ⚠️ IMPORTANTE: Configurar PowerShell primero
+
+Si recibes el error **"la ejecución de scripts está deshabilitada"** o **"no se reconoce como un comando"**:
+
+**PASO A PASO - CÓMO ABRIR POWERSHELL COMO ADMINISTRADOR:**
+
+1. Presiona la tecla **Windows** en tu teclado
+2. Escribe: **powershell**
+3. Haz **clic derecho** sobre **Windows PowerShell** (el logo azul)
+4. Selecciona **"Ejecutar como administrador"**
+5. Clic en **Sí** en el mensaje de seguridad que aparece
+
+**IMPORTANTE:** Asegúrate que dice "Administrador" en el título de la ventana azul que se abre
+
+6. Ahora ejecuta este comando:
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+7. Confirma presionando **S** y luego **Enter**
+8. Cierra esta ventana
+9. Abre PowerShell **normal** (sin administrador) para continuar
+
+### 4. Instalar dependencias
 ```powershell
 # En la raíz del proyecto
 npm install
@@ -29,19 +51,19 @@ npm install
 cd ..
 ```
 
-### 4. Inicializar base de datos SQLite
+### 5. Inicializar base de datos SQLite
 ```powershell
 cd backend
 node init-sqlite.js
 cd ..
 ```
 
-### 5. Instalar Electron
+### 6. Instalar Electron
 ```powershell
 npm install --save-dev electron electron-builder concurrently wait-on cross-env
 ```
 
-### 6. Crear el instalador
+### 7. Crear el instalador
 ```powershell
 # Compilar frontend
 cd frontend
@@ -94,6 +116,14 @@ Abre http://localhost:5173
 
 ## 🆘 Si algo falla
 
+### Error: "ejecución de scripts deshabilitada"
+```powershell
+# Abrir PowerShell como Administrador y ejecutar:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Confirmar con "S", cerrar y abrir PowerShell normal
+```
+
+### Limpiar y reinstalar todo
 ```powershell
 # Limpiar todo
 rmdir /s /q node_modules

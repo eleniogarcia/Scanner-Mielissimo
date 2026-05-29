@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const productosRoutes = require('./routes/productos');
 const ventasRoutes = require('./routes/ventas');
@@ -10,12 +11,14 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Logger middleware
+// Logger middleware (solo errores en producción)
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`${req.method} ${req.path}`);
+  }
   next();
 });
 
@@ -31,6 +34,21 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/productos', productosRoutes);
 app.use('/api/ventas', ventasRoutes);
+
+// Servir frontend en modo Electron
+if (process.env.ELECTRON_MODE) {
+  const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
+  console.log(`📁 Sirviendo frontend desde: ${frontendPath}`);
+  app.use(express.static(frontendPath));
+  
+  // Ruta catch-all para SPA
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -50,9 +68,10 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// Start server (solo si no está en modo Electron)
+if (!process.env.ELECTRON_MODE) {
+  app.listen(PORT, () => {
+    console.log(`
 ╔════════════════════════════════════════╗
 ║     🏪 Sistema POS API Server         ║
 ╠════════════════════════════════════════╣
@@ -80,6 +99,7 @@ Endpoints disponibles:
   • GET    /api/ventas/stats
   • GET    /api/ventas/top-products
   `);
-});
+  });
+}
 
 module.exports = app;

@@ -1,63 +1,152 @@
 const db = require('../config/database');
 
+// Helper: obtiene la hora actual en Argentina (UTC-3, sin horario de verano)
+function getArgentinaTimestamp() {
+  const d = new Date();
+  const arg = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return arg.toISOString().replace('T', ' ').replace('Z', '').substring(0, 19);
+}
+
+// Helper: carga los items de múltiples ventas en 2 queries (evita N+1)
+async function attachItems(ventas) {
+  if (!ventas || ventas.length === 0) return [];
+  const ids = ventas.map(v => v.id);
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+  const itemsResult = await db.query(
+    `SELECT * FROM venta_items WHERE venta_id IN (${placeholders}) ORDER BY venta_id, id`,
+    ids
+  );
+  const itemsByVenta = {};
+  for (const item of itemsResult.rows) {
+    if (!itemsByVenta[item.venta_id]) itemsByVenta[item.venta_id] = [];
+    itemsByVenta[item.venta_id].push(item);
+  }
+  return ventas.map(v => ({ ...v, items: itemsByVenta[v.id] || [] }));
+}
+
 class VentaModel {
   
   // Crear venta con items
   static async create(ventaData, items) {
-    const client = await db.pool.connect();
+    // Detectar si estamos usando SQLite o PostgreSQL
+    const isElectronMode = process.env.ELECTRON_MODE === 'true' || process.env.npm_package_name === 'mielissimo-pos';
     
-    try {
-      await client.query('BEGIN');
+    if (isElectronMode) {
+      // SQLite con better-sqlite3
+      const transaction = db.db.transaction(() => {
+        // Crear venta (created_at con horario Argentina UTC-3)
+        const insertVentaStmt = db.db.prepare(
+          `INSERT INTO ventas (total, items_count, created_at) 
+           VALUES (?, ?, ?)`
+        );
+        
+        const ventaResult = insertVentaStmt.run(
+          ventaData.total,
+          ventaData.items_count,
+          getArgentinaTimestamp()
+        );
+        
+        const ventaId = ventaResult.lastInsertRowid;
+        
+        // Obtener la venta creada
+        const getVentaStmt = db.db.prepare('SELECT * FROM ventas WHERE id = ?');
+        const venta = getVentaStmt.get(ventaId);
 
-      // Crear venta
-      const ventaResult = await client.query(
-        `INSERT INTO ventas (total, items_count, metodo_pago) 
-         VALUES ($1, $2, $3) 
-         RETURNING *`,
-        [ventaData.total, ventaData.items_count, ventaData.metodo_pago]
-      );
-      
-      const venta = ventaResult.rows[0];
-
-      // Insertar items de venta
-      const ventaItems = [];
-      for (const item of items) {
-        const itemResult = await client.query(
+        // Insertar items de venta
+        const insertItemStmt = db.db.prepare(
           `INSERT INTO venta_items 
            (venta_id, producto_id, producto_nombre, producto_codigo, cantidad, precio_unitario, subtotal) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7) 
-           RETURNING *`,
-          [
-            venta.id,
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        );
+        
+        const ventaItems = [];
+        for (const item of items) {
+          const itemResult = insertItemStmt.run(
+            ventaId,
             item.producto_id,
             item.producto_nombre,
             item.producto_codigo || null,
             item.cantidad,
             item.precio_unitario,
             item.subtotal
-          ]
+          );
+          ventaItems.push({
+            id: itemResult.lastInsertRowid,
+            venta_id: ventaId,
+            producto_id: item.producto_id,
+            producto_nombre: item.producto_nombre,
+            producto_codigo: item.producto_codigo || null,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario,
+            subtotal: item.subtotal
+          });
+        }
+
+        return {
+          ...venta,
+          items: ventaItems
+        };
+      });
+      
+      return transaction();
+      
+    } else {
+      // PostgreSQL
+      const client = await db.pool.connect();
+      
+      try {
+        await client.query('BEGIN');
+
+        // Crear venta (created_at con horario Argentina UTC-3)
+        const ventaResult = await client.query(
+          `INSERT INTO ventas (total, items_count, created_at) 
+           VALUES ($1, $2, $3) 
+           RETURNING *`,
+          [ventaData.total, ventaData.items_count, getArgentinaTimestamp()]
         );
         
-        ventaItems.push(itemResult.rows[0]);
+        const venta = ventaResult.rows[0];
+
+        // Insertar items de venta
+        const ventaItems = [];
+        for (const item of items) {
+          const itemResult = await client.query(
+            `INSERT INTO venta_items 
+             (venta_id, producto_id, producto_nombre, producto_codigo, cantidad, precio_unitario, subtotal) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7) 
+             RETURNING *`,
+            [
+              venta.id,
+              item.producto_id,
+              item.producto_nombre,
+              item.producto_codigo || null,
+              item.cantidad,
+              item.precio_unitario,
+              item.subtotal
+            ]
+          );
+          
+          ventaItems.push(itemResult.rows[0]);
+        }
+
+        await client.query('COMMIT');
+
+        return {
+          ...venta,
+          items: ventaItems
+        };
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      await client.query('COMMIT');
-
-      return {
-        ...venta,
-        items: ventaItems
-      };
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
     }
   }
 
   // Obtener todas las ventas con paginación y filtros de fecha
-  static async getAll(limit = 50, offset = 0, filtros = {}) {
+  static async getAll(limit = 50, offset = 0, filtros = {}, options = {}) {
     let query = `SELECT * FROM ventas WHERE 1=1`;
     const params = [];
     let paramCount = 0;
@@ -99,22 +188,7 @@ class VentaModel {
     query += ` OFFSET $${paramCount}`;
 
     const ventasResult = await db.query(query, params);
-    
-    // Obtener items para cada venta
-    const ventas = await Promise.all(
-      ventasResult.rows.map(async (venta) => {
-        const itemsResult = await db.query(
-          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
-          [venta.id]
-        );
-        return {
-          ...venta,
-          items: itemsResult.rows
-        };
-      })
-    );
-    
-    return ventas;
+    return options.includeItems ? attachItems(ventasResult.rows) : ventasResult.rows;
   }
 
   // Obtener venta por ID con items
@@ -140,78 +214,33 @@ class VentaModel {
   }
 
   // Obtener ventas de hoy
-  static async getToday() {
+  static async getToday(options = {}) {
     const ventasResult = await db.query(
       `SELECT * FROM ventas 
        WHERE DATE(created_at) = CURRENT_DATE
        ORDER BY created_at DESC`
     );
-    
-    // Obtener items para cada venta
-    const ventas = await Promise.all(
-      ventasResult.rows.map(async (venta) => {
-        const itemsResult = await db.query(
-          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
-          [venta.id]
-        );
-        return {
-          ...venta,
-          items: itemsResult.rows
-        };
-      })
-    );
-    
-    return ventas;
+    return options.includeItems ? attachItems(ventasResult.rows) : ventasResult.rows;
   }
 
   // Obtener ventas de la semana
-  static async getWeekly() {
+  static async getWeekly(options = {}) {
     const ventasResult = await db.query(
       `SELECT * FROM ventas 
        WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
        ORDER BY created_at DESC`
     );
-    
-    // Obtener items para cada venta
-    const ventas = await Promise.all(
-      ventasResult.rows.map(async (venta) => {
-        const itemsResult = await db.query(
-          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
-          [venta.id]
-        );
-        return {
-          ...venta,
-          items: itemsResult.rows
-        };
-      })
-    );
-    
-    return ventas;
+    return options.includeItems ? attachItems(ventasResult.rows) : ventasResult.rows;
   }
 
   // Obtener ventas del mes
-  static async getMonthly() {
+  static async getMonthly(options = {}) {
     const ventasResult = await db.query(
       `SELECT * FROM ventas 
        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
        ORDER BY created_at DESC`
     );
-    
-    // Obtener items para cada venta
-    const ventas = await Promise.all(
-      ventasResult.rows.map(async (venta) => {
-        const itemsResult = await db.query(
-          'SELECT * FROM venta_items WHERE venta_id = $1 ORDER BY id',
-          [venta.id]
-        );
-        return {
-          ...venta,
-          items: itemsResult.rows
-        };
-      })
-    );
-    
-    return ventas;
+    return options.includeItems ? attachItems(ventasResult.rows) : ventasResult.rows;
   }
 
   // Estadísticas de ventas

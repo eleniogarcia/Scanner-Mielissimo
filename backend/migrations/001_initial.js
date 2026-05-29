@@ -11,6 +11,7 @@ async function createTables() {
         nombre VARCHAR(255) NOT NULL,
         codigo VARCHAR(255) UNIQUE,
         precio DECIMAL(10, 2) NOT NULL CHECK (precio >= 0),
+        fecha_vencimiento DATE,
         stock INTEGER DEFAULT 0 CHECK (stock >= 0),
         activo BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -34,7 +35,7 @@ async function createTables() {
       CREATE TABLE IF NOT EXISTS venta_items (
         id SERIAL PRIMARY KEY,
         venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
-        producto_id INTEGER NOT NULL REFERENCES productos(id),
+        producto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
         producto_nombre VARCHAR(255) NOT NULL,
         producto_codigo VARCHAR(255),
         cantidad INTEGER NOT NULL CHECK (cantidad > 0),
@@ -48,6 +49,7 @@ async function createTables() {
     await db.query(`
       CREATE INDEX IF NOT EXISTS idx_productos_codigo ON productos(codigo);
       CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos(activo);
+      CREATE INDEX IF NOT EXISTS idx_productos_fecha_vencimiento ON productos(fecha_vencimiento);
       CREATE INDEX IF NOT EXISTS idx_ventas_created ON ventas(created_at);
       CREATE INDEX IF NOT EXISTS idx_venta_items_venta ON venta_items(venta_id);
     `);
