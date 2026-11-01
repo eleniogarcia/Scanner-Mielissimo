@@ -1,6 +1,7 @@
 const VentaModel = require('../models/VentaModel');
 const ProductoModel = require('../models/ProductoModel');
 const { CajaModel, METODOS_PAGO } = require('../models/CajaModel');
+const webSync = require('../services/webSync');
 const { validationResult } = require('express-validator');
 
 class VentaController {
@@ -125,6 +126,9 @@ class VentaController {
       };
 
       const venta = await VentaModel.create(ventaData, ventaItems);
+
+      // Si algún producto publicado en la web se quedó sin stock, avisar (en segundo plano)
+      webSync.compararYEncolar(productosArr);
 
       res.status(201).json({
         success: true,
@@ -397,8 +401,15 @@ class VentaController {
         });
       }
 
+      // Stock antes de borrar (al borrar la venta se repone el stock)
+      const idsProductos = [...new Set(venta.items.map(i => i.producto_id).filter(Boolean))];
+      const productosAntes = idsProductos.length > 0 ? await ProductoModel.getByIds(idsProductos) : [];
+
       // Eliminar la venta (esto también eliminará los items por CASCADE)
       await VentaModel.delete(id);
+
+      // Si un producto publicado vuelve a tener stock, la web lo reactiva
+      webSync.compararYEncolar(productosAntes);
 
       res.json({
         success: true,

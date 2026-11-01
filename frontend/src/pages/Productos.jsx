@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { productosAPI } from '../services/api';
+import { productosAPI, webAPI } from '../services/api';
+import ConexionWeb from './ConexionWeb';
 import './Productos.css';
 
 const formatFechaVencimiento = (fecha) => {
@@ -49,6 +50,38 @@ function Productos() {
   // Modal de confirmación propio (reemplaza window.confirm para no romper el foco en Electron)
   const [confirmModal, setConfirmModal] = useState({ visible: false, mensaje: '', onConfirm: null });
 
+  // Web del negocio
+  const [webEstado, setWebEstado] = useState(null);
+  const [showWebModal, setShowWebModal] = useState(false);
+  const [webCategorias, setWebCategorias] = useState(null); // null = sin cargar
+  const [webCategoriasError, setWebCategoriasError] = useState('');
+  const [publicarWeb, setPublicarWeb] = useState(false);
+  const [webCategoriaId, setWebCategoriaId] = useState('');
+
+  const cargarWebEstado = async () => {
+    try {
+      const r = await webAPI.getEstado();
+      setWebEstado(r.data.data);
+      return r.data.data;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  const cargarWebCategorias = async () => {
+    setWebCategoriasError('');
+    try {
+      const r = await webAPI.getCategorias();
+      setWebCategorias(r.data.data || []);
+    } catch (e) {
+      setWebCategorias([]);
+      setWebCategoriasError(e.response?.data?.message || 'No se pudieron traer las categorías de la web');
+    }
+  };
+
+  const pendientesWeb = new Set((webEstado?.pendientes || []).map(p => p.producto_id));
+
   const mostrarConfirm = (mensaje, onConfirm) => {
     setConfirmModal({ visible: true, mensaje, onConfirm });
   };
@@ -57,7 +90,13 @@ function Productos() {
 
   useEffect(() => {
     cargarProductos();
+    cargarWebEstado();
   }, []);
+
+  // Cuando se marca "Publicar en la web", traer las categorías de la web
+  useEffect(() => {
+    if (publicarWeb && webCategorias === null) cargarWebCategorias();
+  }, [publicarWeb]);
 
   useEffect(() => {
     if (mensaje.texto) {
@@ -121,24 +160,45 @@ function Productos() {
       return;
     }
 
+    if (publicarWeb && !webCategoriaId) {
+      setModalError('Elegí en qué categoría de la web va el producto');
+      return;
+    }
+
     const payload = {
       ...formData,
       precio: precioNormalizado,
       costo: costoNormalizado === null ? 0 : costoNormalizado,
       stock: parseNonNegativeInt(formData.stock, 0)
     };
-    
+
     try {
       if (editando) {
         await productosAPI.update(editando.id, payload);
-        mostrarMensaje('success', 'Producto actualizado');
+        if (publicarWeb) {
+          await webAPI.publicar(editando.id, parseInt(webCategoriaId));
+          mostrarMensaje('success', 'Producto actualizado y publicándose en la web (sin foto)');
+        } else {
+          mostrarMensaje('success', 'Producto actualizado');
+        }
       } else {
-        await productosAPI.create(payload);
-        mostrarMensaje('success', 'Producto creado');
+        await productosAPI.create({
+          ...payload,
+          publicar_web: publicarWeb,
+          web_categoria_id: publicarWeb ? parseInt(webCategoriaId) : undefined
+        });
+        mostrarMensaje('success', publicarWeb ? 'Producto creado y publicándose en la web (sin foto)' : 'Producto creado');
       }
-      
+
       cerrarModal();
       cargarProductos();
+      // Refrescar el estado de la web cuando se terminó de mandar
+      if (publicarWeb) {
+        setTimeout(cargarWebEstado, 300);
+        setTimeout(() => { cargarWebEstado(); cargarProductos(); }, 4000);
+      } else {
+        setTimeout(cargarWebEstado, 2500);
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Error al guardar producto';
       if (editando) {
@@ -185,6 +245,8 @@ function Productos() {
     setEditando(null);
     setModalError('');
     setFormData({ nombre: '', codigo: '', precio: '', costo: 0, stock: 0, fabricante: '', fecha_vencimiento: '', activo: true });
+    setPublicarWeb(false);
+    setWebCategoriaId('');
   };
 
   const mostrarMensaje = (tipo, texto) => {
@@ -297,6 +359,17 @@ function Productos() {
           <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)}>
             Carga Masiva
           </button>
+          <button
+            className="btn btn-outline"
+            onClick={async () => { await cargarWebEstado(); setShowWebModal(true); }}
+            title="Conexión con la tienda online"
+          >
+            <span
+              className={`web-dot ${!webEstado?.configurada ? 'web-dot-off' : (webEstado.pendientes?.length ? 'web-dot-pend' : 'web-dot-ok')}`}
+            />
+            Web
+            {webEstado?.pendientes?.length > 0 && <span className="web-pend-count">{webEstado.pendientes.length}</span>}
+          </button>
         </div>
       </div>
 
@@ -340,6 +413,11 @@ function Productos() {
                     <td>{producto.id}</td>
                     <td>
                       <strong>{producto.nombre}</strong>
+                      {producto.web_producto_id ? (
+                        <span className="web-badge web-badge-ok" title="Publicado en la web: precio y stock se actualizan solos">En la web</span>
+                      ) : pendientesWeb.has(producto.id) ? (
+                        <span className="web-badge web-badge-pend" title="Se va a publicar cuando haya conexión">Subiendo a la web…</span>
+                      ) : null}
                       {producto.precio_actualizado_at && (
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
                           Precio actualizado: {new Date(producto.precio_actualizado_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
@@ -592,6 +670,65 @@ function Productos() {
                 </p>
               </div>
 
+              {/* Tienda online */}
+              <div className="web-seccion">
+                {editando?.web_producto_id ? (
+                  <div className="text-sm">
+                    <strong className="text-success">✓ Publicado en la web.</strong>{' '}
+                    Los cambios de precio y de stock se actualizan solos.
+                  </div>
+                ) : editando && pendientesWeb.has(editando.id) ? (
+                  <div className="text-sm">Se está publicando en la web (se manda cuando haya conexión).</div>
+                ) : !webEstado?.configurada ? (
+                  <div className="text-sm text-secondary">
+                    Para publicar este producto en la tienda online, primero conectá el POS con la web (botón <strong>Web</strong> arriba).
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={publicarWeb}
+                        onChange={(e) => setPublicarWeb(e.target.checked)}
+                      />
+                      <span>Publicar en la web</span>
+                    </label>
+                    {publicarWeb && (
+                      <>
+                        <label className="label" style={{ marginTop: '0.6rem' }}>Categoría en la web <span className="required">*</span></label>
+                        {webCategorias === null ? (
+                          <div className="text-sm text-secondary">Cargando categorías de la web...</div>
+                        ) : webCategoriasError ? (
+                          <div className="text-sm text-danger">
+                            {webCategoriasError}{' '}
+                            <button type="button" className="btn btn-sm btn-outline" onClick={cargarWebCategorias}>Reintentar</button>
+                          </div>
+                        ) : (
+                          <select
+                            className="input"
+                            value={webCategoriaId}
+                            onChange={(e) => setWebCategoriaId(e.target.value)}
+                            style={{ width: '100%' }}
+                          >
+                            <option value="">Elegí una categoría...</option>
+                            {webCategorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                          </select>
+                        )}
+                        <div className="web-aviso">
+                          📷 Se va a publicar <strong>sin foto</strong> (con una imagen genérica de Mielissimo).
+                          Agregale la foto después desde el panel de administración de la web.
+                        </div>
+                        {parseNonNegativeInt(formData.stock, 0) > 0 && (
+                          <div className="text-xs text-secondary" style={{ marginTop: '0.4rem' }}>
+                            Cuando el stock llegue a 0 se va a pausar solo en la web, y vuelve a aparecer cuando cargues más.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+
               {editando && (
                 <div className="form-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -616,6 +753,14 @@ function Productos() {
             </form>
           </div>
         </div>
+      )}
+
+      {showWebModal && (
+        <ConexionWeb
+          estado={webEstado}
+          onCerrar={() => setShowWebModal(false)}
+          onActualizado={async () => { await cargarWebEstado(); setWebCategorias(null); cargarProductos(); }}
+        />
       )}
 
       {/* Modal de Carga Masiva */}

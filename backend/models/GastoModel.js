@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { ahoraArgentina, rangoMes, ultimosMeses } = require('../utils/fecha');
+const { ahoraArgentina, rangoMes, ultimosMeses, mesActualArgentina, mesesEntre, fechaDelMes } = require('../utils/fecha');
 const { withTransaction } = require('../utils/transaction');
 
 // Las compras de mercadería NO van como gasto: ya se descuentan como costo de los productos vendidos.
@@ -29,6 +29,22 @@ class GastoModel {
       [fecha, redondear(monto), categoria, descripcion || null, ahoraArgentina()]
     );
     return r.rows[0];
+  }
+
+  // Editar un gasto ya cargado (ej: la luz de este mes vino distinta al monto fijo)
+  static async update(id, { fecha, monto, categoria, descripcion }) {
+    const r = await db.query(
+      `UPDATE gastos SET fecha = $1, monto = $2, categoria = $3, descripcion = $4
+       WHERE id = $5
+       RETURNING *`,
+      [fecha, redondear(monto), categoria, descripcion || null, id]
+    );
+    return r.rows[0] || null;
+  }
+
+  static async getById(id) {
+    const r = await db.query('SELECT * FROM gastos WHERE id = $1', [id]);
+    return r.rows[0] || null;
   }
 
   // Si el gasto salió de la caja y la caja sigue abierta, también se borra el retiro de caja
@@ -135,4 +151,100 @@ class GastoModel {
   }
 }
 
-module.exports = { GastoModel, CATEGORIAS_GASTO };
+// ── Gastos fijos: se cargan una vez y aparecen solos todos los meses ──
+class GastoFijoModel {
+
+  static async getAll() {
+    const r = await db.query('SELECT * FROM gastos_fijos ORDER BY activo DESC, dia ASC, id ASC');
+    return r.rows;
+  }
+
+  static async getById(id) {
+    const r = await db.query('SELECT * FROM gastos_fijos WHERE id = $1', [id]);
+    return r.rows[0] || null;
+  }
+
+  static async create({ descripcion, categoria, monto, dia, desde }) {
+    const r = await db.query(
+      `INSERT INTO gastos_fijos (descripcion, categoria, monto, dia, desde, activo, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [descripcion, categoria, redondear(monto), dia, desde, true, ahoraArgentina()]
+    );
+    await this.generarPendientes();
+    return r.rows[0];
+  }
+
+  // Los cambios de monto/día valen para los meses que todavía no se generaron.
+  // Al reactivar uno pausado, arranca desde el mes actual (no rellena los meses en pausa).
+  static async update(id, datos) {
+    const actual = await this.getById(id);
+    if (!actual) return null;
+
+    const activo = datos.activo !== undefined ? Boolean(datos.activo) : Boolean(actual.activo);
+    let desde = actual.desde;
+    if (activo && !actual.activo) {
+      const mesActual = mesActualArgentina();
+      if (mesActual > desde) desde = mesActual;
+    }
+
+    const r = await db.query(
+      `UPDATE gastos_fijos SET descripcion = $1, categoria = $2, monto = $3, dia = $4, activo = $5, desde = $6
+       WHERE id = $7
+       RETURNING *`,
+      [
+        datos.descripcion ?? actual.descripcion,
+        datos.categoria ?? actual.categoria,
+        redondear(datos.monto ?? actual.monto),
+        datos.dia ?? actual.dia,
+        activo,
+        desde,
+        id
+      ]
+    );
+    if (activo) await this.generarPendientes();
+    return r.rows[0];
+  }
+
+  // Borra el gasto fijo. Los gastos que ya generó en meses anteriores se quedan.
+  static async delete(id) {
+    return withTransaction(async (query) => {
+      const r = await query('SELECT * FROM gastos_fijos WHERE id = $1', [id]);
+      if (!r.rows[0]) return null;
+      await query('UPDATE gastos SET gasto_fijo_id = NULL WHERE gasto_fijo_id = $1', [id]);
+      await query('DELETE FROM gastos_fijos_generados WHERE gasto_fijo_id = $1', [id]);
+      await query('DELETE FROM gastos_fijos WHERE id = $1', [id]);
+      return r.rows[0];
+    });
+  }
+
+  // Crea los gastos de cada gasto fijo activo para los meses que falten, hasta el mes actual.
+  // Cada mes se genera una sola vez: si después borrás ese gasto, no vuelve a aparecer.
+  static async generarPendientes() {
+    const mesActual = mesActualArgentina();
+    const fijos = (await db.query('SELECT * FROM gastos_fijos WHERE activo = $1', [true])).rows;
+    let creados = 0;
+
+    for (const fijo of fijos) {
+      for (const mes of mesesEntre(fijo.desde, mesActual)) {
+        await withTransaction(async (query) => {
+          const marca = await query(
+            `INSERT INTO gastos_fijos_generados (gasto_fijo_id, mes) VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [fijo.id, mes]
+          );
+          if (!marca.rowCount) return; // ya estaba generado
+          await query(
+            `INSERT INTO gastos (fecha, monto, categoria, descripcion, gasto_fijo_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [fechaDelMes(mes, parseInt(fijo.dia) || 1), redondear(num(fijo.monto)), fijo.categoria, fijo.descripcion, fijo.id, ahoraArgentina()]
+          );
+          creados++;
+        });
+      }
+    }
+    return creados;
+  }
+}
+
+module.exports = { GastoModel, GastoFijoModel, CATEGORIAS_GASTO };

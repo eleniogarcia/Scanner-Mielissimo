@@ -6,6 +6,8 @@ const { up: addCosto } = require('./004_add_costo_productos');
 const { up: makeProductoIdNullable } = require('./005_nullable_producto_id');
 const { up: addFechaVencimiento } = require('./006_add_fecha_vencimiento_productos');
 const { up: addCajaYGastos } = require('./007_caja_y_gastos');
+const { up: addGastosFijos } = require('./008_gastos_fijos');
+const { up: addIntegracionWeb } = require('./009_integracion_web');
 const { pool } = require('../config/database');
 
 async function runMigrations() {
@@ -32,6 +34,12 @@ async function runMigrations() {
 
     // Migración 007: caja (apertura/cierre), movimientos y gastos
     await addCajaYGastos();
+
+    // Migración 008: gastos fijos (recurrentes)
+    await addGastosFijos();
+
+    // Migración 009: integración con la web (publicar productos, stock y precios)
+    await addIntegracionWeb();
     
     console.log('\n✅ Todas las migraciones completadas');
     process.exit(0);

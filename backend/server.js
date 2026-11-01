@@ -7,6 +7,8 @@ const productosRoutes = require('./routes/productos');
 const ventasRoutes = require('./routes/ventas');
 const cajaRoutes = require('./routes/caja');
 const gastosRoutes = require('./routes/gastos');
+const webRoutes = require('./routes/web');
+const webSync = require('./services/webSync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +40,10 @@ app.use('/api/productos', productosRoutes);
 app.use('/api/ventas', ventasRoutes);
 app.use('/api/caja', cajaRoutes);
 app.use('/api/gastos', gastosRoutes);
+app.use('/api/web', webRoutes);
+
+// Mandar a la web los cambios pendientes (y reintentar cada minuto si no hay internet)
+webSync.iniciar();
 
 // Servir frontend en modo Electron
 if (process.env.ELECTRON_MODE) {

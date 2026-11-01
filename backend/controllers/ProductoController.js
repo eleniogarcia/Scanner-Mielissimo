@@ -1,4 +1,5 @@
 const ProductoModel = require('../models/ProductoModel');
+const webSync = require('../services/webSync');
 const { validationResult } = require('express-validator');
 
 class ProductoController {
@@ -194,6 +195,12 @@ class ProductoController {
       }
 
       const producto = await ProductoModel.create(req.body);
+
+      // Publicar en la web si lo pidieron (se manda en segundo plano)
+      if (req.body.publicar_web === true || req.body.publicar_web === 'true') {
+        const categoriaWeb = req.body.web_categoria_id ? parseInt(req.body.web_categoria_id) : null;
+        webSync.encolarCrear(producto.id, categoriaWeb).catch(e => console.error('[web] Error encolando publicación:', e));
+      }
       
       res.status(201).json({
         success: true,
@@ -256,6 +263,9 @@ class ProductoController {
 
       // Pasar el precio anterior para detectar cambios
       const producto = await ProductoModel.update(id, req.body, existing.precio);
+
+      // Avisar a la web si cambió precio, nombre o se quedó sin stock / volvió a tener
+      webSync.compararYEncolar([existing]);
       
       res.json({
         success: true,
@@ -333,7 +343,9 @@ class ProductoController {
         });
       }
 
+      const publicadosAntes = updateExisting ? await webSync.getPublicados() : [];
       const resultado = await ProductoModel.createBulk(productos, updateExisting);
+      if (publicadosAntes.length > 0) webSync.compararYEncolar(publicadosAntes);
 
       // Si todos fallaron
       if (resultado.creados === 0 && resultado.actualizados === 0) {

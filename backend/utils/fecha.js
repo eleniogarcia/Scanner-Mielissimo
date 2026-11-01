@@ -37,8 +37,30 @@ function ultimosMeses(n, desdeMes = mesActualArgentina()) {
   return meses;
 }
 
+// Meses desde 'desde' hasta 'hasta' inclusive, en orden ('YYYY-MM'). Máximo `limite` meses (los más recientes).
+function mesesEntre(desde, hasta, limite = 24) {
+  if (desde > hasta) return [];
+  const meses = [];
+  let [anio, m] = hasta.split('-').map(Number);
+  while (meses.length < limite) {
+    const mes = `${anio}-${String(m).padStart(2, '0')}`;
+    if (mes < desde) break;
+    meses.unshift(mes);
+    m -= 1;
+    if (m === 0) { m = 12; anio -= 1; }
+  }
+  return meses;
+}
+
+// Fecha del día `dia` en el mes, ajustada si el mes es más corto (ej: 31 en febrero → 28/29)
+function fechaDelMes(mes, dia) {
+  const [anio, m] = mes.split('-').map(Number);
+  const ultimoDia = new Date(Date.UTC(anio, m, 0)).getUTCDate();
+  return `${mes}-${String(Math.min(dia, ultimoDia)).padStart(2, '0')}`;
+}
+
 function esMesValido(mes) {
   return typeof mes === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes);
 }
 
-module.exports = { ahoraArgentina, hoyArgentina, mesActualArgentina, rangoMes, ultimosMeses, esMesValido };
+module.exports = { ahoraArgentina, hoyArgentina, mesActualArgentina, rangoMes, ultimosMeses, mesesEntre, fechaDelMes, esMesValido };

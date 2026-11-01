@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { gastosAPI, CATEGORIAS_GASTO, nombreCategoria, formatearPesos } from '../services/api';
+import GastosFijos from './GastosFijos';
 import './BalanceMensual.css';
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -38,6 +39,8 @@ function BalanceMensual() {
   const [form, setForm] = useState({ fecha: fechaDefault(mesActual()), monto: '', categoria: 'alquiler', descripcion: '' });
   const [guardando, setGuardando] = useState(false);
   const [borrandoId, setBorrandoId] = useState(null);
+  const [editandoId, setEditandoId] = useState(null);
+  const [editMonto, setEditMonto] = useState('');
 
   const cargar = async (mesACargar = mes) => {
     setCargando(true);
@@ -62,6 +65,7 @@ function BalanceMensual() {
     cargar(mes);
     setForm(f => ({ ...f, fecha: fechaDefault(mes) }));
     setBorrandoId(null);
+    setEditandoId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes]);
 
@@ -106,6 +110,22 @@ function BalanceMensual() {
       cargar(mes);
     } catch (err) {
       setMensaje({ tipo: 'error', texto: err.response?.data?.message || 'No se pudo borrar el gasto' });
+    }
+  };
+
+  const guardarMonto = async (id) => {
+    const monto = parseFloat(String(editMonto).replace(',', '.'));
+    if (isNaN(monto) || monto <= 0) {
+      setMensaje({ tipo: 'error', texto: 'El monto debe ser mayor a 0' });
+      return;
+    }
+    try {
+      await gastosAPI.update(id, { monto });
+      setEditandoId(null);
+      setMensaje({ tipo: 'success', texto: 'Monto actualizado' });
+      cargar(mes);
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.response?.data?.message || 'No se pudo editar el gasto' });
     }
   };
 
@@ -247,9 +267,34 @@ function BalanceMensual() {
                         <span className="bal-gasto-cat">{nombreCategoria(g.categoria)}</span>
                         {g.descripcion && <span className="bal-gasto-desc">{g.descripcion}</span>}
                         {g.caja_id && <span className="bal-gasto-caja">Pagado con plata de la caja</span>}
+                        {g.gasto_fijo_id && <span className="bal-gasto-fijo">Gasto fijo</span>}
                       </span>
-                      <span className="bal-gasto-monto">{formatearPesos(g.monto)}</span>
-                      {borrandoId === g.id ? (
+                      {editandoId === g.id ? (
+                        <span className="bal-fijo-edit">
+                          <input
+                            autoFocus
+                            className="input bal-fijo-edit-monto"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={editMonto}
+                            onChange={(e) => setEditMonto(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') guardarMonto(g.id); if (e.key === 'Escape') setEditandoId(null); }}
+                          />
+                          <button className="btn btn-primary btn-sm" onClick={() => guardarMonto(g.id)}>OK</button>
+                        </span>
+                      ) : (
+                        <button
+                          className="bal-gasto-monto bal-monto-editable"
+                          title="Tocá para cambiar el monto"
+                          onClick={() => { setBorrandoId(null); setEditandoId(g.id); setEditMonto(String(parseFloat(g.monto))); }}
+                        >
+                          {formatearPesos(g.monto)}
+                        </button>
+                      )}
+                      {editandoId === g.id ? (
+                        <button className="btn btn-secondary btn-sm" onClick={() => setEditandoId(null)}>✕</button>
+                      ) : borrandoId === g.id ? (
                         <span className="bal-gasto-confirmar">
                           <button className="btn btn-danger btn-sm" onClick={() => borrarGasto(g.id)}>Borrar</button>
                           <button className="btn btn-secondary btn-sm" onClick={() => setBorrandoId(null)}>No</button>
@@ -285,6 +330,11 @@ function BalanceMensual() {
               )}
             </div>
           </div>
+
+          <GastosFijos
+            onCambio={() => cargar(mes)}
+            onMensaje={(tipo, texto) => setMensaje({ tipo, texto })}
+          />
 
           {/* Comparativa últimos meses */}
           <div className="card bal-historico">

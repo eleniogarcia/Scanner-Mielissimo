@@ -58,7 +58,9 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
   const ventaExitosa = ventaExitosaMap[activeTabId] || null;
   const itemsAnimando = !!itemsAnimandoMap[activeTabId];
   const [modalConfirmar, setModalConfirmar] = useState(false);
-  const [metodoPago, setMetodoPago] = useState('efectivo');
+  const [metodoPago, setMetodoPago] = useState('transferencia');
+  const [pagaCon, setPagaCon] = useState(''); // solo para efectivo: con cuánto paga el cliente
+  const pagaConRef = useRef(null);
   const [sugerencias, setSugerencias] = useState([]);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
   const [seleccionIndex, setSeleccionIndex] = useState(-1);
@@ -672,6 +674,26 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
     setMostrarSugerencias(false);
   };
 
+  // ── Vuelto (pago en efectivo) ──
+  const parsearPagaCon = () => {
+    if (pagaCon === '' || pagaCon === null) return NaN;
+    return parseFloat(String(pagaCon).replace(',', '.'));
+  };
+  // Billetes sugeridos: el próximo múltiplo de cada billete común que cubra el total
+  const sugerenciasPago = (total) => {
+    const billetes = [1000, 2000, 10000, 20000];
+    const opciones = new Set();
+    for (const b of billetes) {
+      const monto = Math.ceil(total / b) * b;
+      if (monto > total) opciones.add(monto);
+    }
+    return [...opciones].sort((a, b) => a - b).slice(0, 4);
+  };
+  const elegirMetodoPago = (metodo) => {
+    setMetodoPago(metodo);
+    if (metodo === 'efectivo') setTimeout(() => pagaConRef.current?.focus(), 30);
+  };
+
   // Procesar venta — abre modal de confirmación
   const procesarVenta = () => {
     if (carrito.length === 0) {
@@ -682,12 +704,13 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
       mostrarMensaje('error', 'La caja está cerrada. Abrila para poder vender.');
       return;
     }
-    setMetodoPago('efectivo');
+    setMetodoPago('transferencia');
+    setPagaCon('');
     setModalConfirmar(true);
   };
 
   // Imprimir ticket en impresora térmica
-  const imprimirTicketTermico = (venta, items) => {
+  const imprimirTicketTermico = (venta, items, pago = {}) => {
     const ahora = new Date();
     const fecha = ahora.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const hora  = ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -762,6 +785,10 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
       <td class="td-precio">$${parseFloat(venta.total).toFixed(2)}</td>
     </tr>
   </table>
+  ${pago.metodo ? `<div class="meta">Pago: ${(METODOS_PAGO.find(m => m.value === pago.metodo) || {}).label || pago.metodo}</div>` : ''}
+  ${pago.metodo === 'efectivo' && !isNaN(pago.pagaCon) && pago.pagaCon >= parseFloat(venta.total) ? `
+  <div class="meta">Paga con: $${pago.pagaCon.toFixed(2)}</div>
+  <div class="meta">Vuelto: $${(pago.pagaCon - parseFloat(venta.total)).toFixed(2)}</div>` : ''}
   <div class="linea-doble"></div>
   <div class="centro gracias">¡Gracias por su compra!</div>
 </body></html>`;
@@ -791,6 +818,7 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
   const confirmarVenta = async () => {
     const tabId = activeTab.id; // capturar ahora para no depender del tab activo al completar
     const carritoSnapshot = [...carrito]; // snapshot local, no compartido entre tabs
+    const pagoSnapshot = { metodo: metodoPago, pagaCon: metodoPago === 'efectivo' ? parsearPagaCon() : NaN };
     setModalConfirmar(false);
     setItemsAnimandoMap(prev => ({ ...prev, [tabId]: true }));
     setProcesandoVentaMap(prev => ({ ...prev, [tabId]: true }));
@@ -837,7 +865,7 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
       // Devolver foco al input para que el scanner siga funcionando
       setTimeout(() => inputRef.current?.focus(), 60);
       if (imprimirTicket) {
-        imprimirTicketTermico(ventaGuardada, carritoSnapshot);
+        imprimirTicketTermico(ventaGuardada, carritoSnapshot, pagoSnapshot);
       }
       if (ventaExitosaTimersRef.current[tabId]) clearTimeout(ventaExitosaTimersRef.current[tabId]);
       ventaExitosaTimersRef.current[tabId] = setTimeout(() => {
@@ -1443,22 +1471,76 @@ function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
             <div className="vcm-metodos">
               <span className="vcm-metodos-label">Forma de pago</span>
               <div className="vcm-metodos-opciones">
-                {METODOS_PAGO.map(m => (
+                {['transferencia', 'efectivo', 'tarjeta'].map(valor => METODOS_PAGO.find(m => m.value === valor)).map(m => (
                   <button
                     key={m.value}
                     type="button"
                     className={`vcm-metodo${metodoPago === m.value ? ' vcm-metodo-activo' : ''}`}
-                    onClick={() => setMetodoPago(m.value)}
+                    onClick={() => elegirMetodoPago(m.value)}
                   >
                     {m.label}
                   </button>
                 ))}
               </div>
+
+              {metodoPago === 'efectivo' && (() => {
+                const total = calcularTotal();
+                const paga = parsearPagaCon();
+                const hayMonto = !isNaN(paga);
+                const vuelto = hayMonto ? paga - total : 0;
+                return (
+                  <div className="vcm-efectivo">
+                    <label className="vcm-metodos-label">¿Con cuánto paga? <span className="vcm-opcional">(opcional)</span></label>
+                    <div className="vcm-paga-con">
+                      <span>$</span>
+                      <input
+                        ref={pagaConRef}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder={total.toFixed(2)}
+                        value={pagaCon}
+                        onChange={(e) => setPagaCon(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (!hayMonto || vuelto >= 0)) { e.preventDefault(); confirmarVenta(); }
+                          if (e.key === 'Escape') setModalConfirmar(false);
+                        }}
+                      />
+                    </div>
+                    <div className="vcm-sugerencias">
+                      <button type="button" onClick={() => setPagaCon(String(total))}>Justo</button>
+                      {sugerenciasPago(total).map(monto => (
+                        <button type="button" key={monto} onClick={() => setPagaCon(String(monto))}>
+                          ${monto.toLocaleString('es-AR')}
+                        </button>
+                      ))}
+                    </div>
+                    {hayMonto && (
+                      vuelto >= 0 ? (
+                        <div className="vcm-vuelto">
+                          <span>Vuelto</span>
+                          <strong>${vuelto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        </div>
+                      ) : (
+                        <div className="vcm-vuelto vcm-vuelto-falta">
+                          <span>Falta</span>
+                          <strong>${(-vuelto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="vcm-actions">
               <button className="vcm-btn-cancelar" onClick={() => setModalConfirmar(false)}>Cancelar</button>
-              <button className="vcm-btn-confirmar" onClick={confirmarVenta}>
+              <button
+                className="vcm-btn-confirmar"
+                onClick={confirmarVenta}
+                disabled={metodoPago === 'efectivo' && !isNaN(parsearPagaCon()) && parsearPagaCon() < calcularTotal()}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 Confirmar venta
               </button>

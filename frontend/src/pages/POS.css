@@ -1355,3 +1355,43 @@
   border-radius: 1rem; background: #fee2e2; color: #b91c1c;
   display: flex; align-items: center; justify-content: center;
 }
+
+/* ── Pago en efectivo: con cuánto paga y vuelto ── */
+.vcm-efectivo {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+.vcm-opcional { font-weight: 400; color: #94a3b8; }
+.vcm-paga-con { position: relative; }
+.vcm-paga-con > span {
+  position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%);
+  font-weight: 700; color: #475569;
+}
+.vcm-paga-con input {
+  width: 100%;
+  padding: 0.6rem 0.75rem 0.6rem 1.7rem;
+  font-size: 1.25rem; font-weight: 700;
+  border: 1.5px solid #86efac; border-radius: 0.6rem;
+  outline: none; font-family: inherit;
+}
+.vcm-paga-con input:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15); }
+.vcm-sugerencias { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+.vcm-sugerencias button {
+  border: 1px solid #bbf7d0; background: #fff; color: #166534;
+  border-radius: 999px; padding: 0.25rem 0.7rem;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.vcm-sugerencias button:hover { background: #dcfce7; }
+.vcm-vuelto {
+  margin-top: 0.6rem;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.5rem 0.75rem; border-radius: 0.6rem;
+  background: #16a34a; color: #fff;
+}
+.vcm-vuelto span { font-weight: 600; font-size: 0.9rem; }
+.vcm-vuelto strong { font-size: 1.5rem; letter-spacing: -0.02em; }
+.vcm-vuelto-falta { background: #dc2626; }
+.vcm-btn-confirmar:disabled { opacity: 0.5; cursor: not-allowed; }

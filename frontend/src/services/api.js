@@ -139,9 +139,24 @@ export const cajaAPI = {
 export const gastosAPI = {
   getByMes: (mes) => api.get(`/gastos?mes=${mes}`),
   create: (data) => api.post('/gastos', data),
+  update: (id, data) => api.put(`/gastos/${id}`, data),
   delete: (id) => api.delete(`/gastos/${id}`),
+  getFijos: () => api.get('/gastos/fijos'),
+  createFijo: (data) => api.post('/gastos/fijos', data),
+  updateFijo: (id, data) => api.put(`/gastos/fijos/${id}`, data),
+  deleteFijo: (id) => api.delete(`/gastos/fijos/${id}`),
   getBalance: (mes) => api.get(`/gastos/balance?mes=${mes}`),
   getBalanceMeses: (n = 6) => api.get(`/gastos/balance/meses?n=${n}`)
+};
+
+// Conexión con la web del negocio (publicar productos, stock y precios)
+export const webAPI = {
+  getEstado: () => api.get('/web/estado'),
+  guardarConfig: (data) => api.put('/web/config', data),
+  probar: (data = {}) => api.post('/web/probar', data),
+  getCategorias: () => api.get('/web/categorias'),
+  sincronizar: () => api.post('/web/sincronizar'),
+  publicar: (productoId, categoria_id) => api.post(`/web/publicar/${productoId}`, { categoria_id })
 };
 
 export const CATEGORIAS_GASTO = [

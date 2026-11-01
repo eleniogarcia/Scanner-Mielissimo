@@ -157,3 +157,28 @@ tbody tr td:first-child {
 
   .modal-overlay { align-items: flex-end; padding: 0; }
 }
+
+/* ── Tienda online (web) ── */
+.web-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.15rem; }
+.web-dot-off { background: #cbd5e1; }
+.web-dot-ok { background: #22c55e; }
+.web-dot-pend { background: #f59e0b; }
+.web-pend-count {
+  background: #f59e0b; color: #fff; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; padding: 0 0.4rem; margin-left: 0.15rem;
+}
+.web-badge {
+  display: inline-block; margin-left: 0.5rem; vertical-align: middle;
+  font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 999px;
+}
+.web-badge-ok { background: #e0e7ff; color: #3730a3; }
+.web-badge-pend { background: #fef3c7; color: #92400e; }
+.web-seccion {
+  margin-top: 1rem; padding: 0.85rem;
+  border: 1px dashed #c7d2fe; border-radius: 0.6rem; background: #f8faff;
+}
+.web-aviso {
+  margin-top: 0.6rem; padding: 0.5rem 0.65rem;
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 0.5rem;
+  font-size: 0.8rem; color: #9a3412;
+}

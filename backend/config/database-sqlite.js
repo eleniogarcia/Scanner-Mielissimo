@@ -135,6 +135,56 @@ function initTablesIfNotExist() {
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_ventas_caja ON ventas(caja_id)`);
 
+  // ── Gastos fijos (recurrentes, se generan solos cada mes) ──────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gastos_fijos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      descripcion TEXT NOT NULL,
+      categoria TEXT NOT NULL DEFAULT 'otros',
+      monto REAL NOT NULL CHECK (monto > 0),
+      dia INTEGER NOT NULL DEFAULT 1 CHECK (dia BETWEEN 1 AND 31),
+      desde TEXT NOT NULL,
+      activo INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now', '-3 hours'))
+    )
+  `);
+  // Registro de qué meses ya se generaron (si borrás el gasto de un mes, no se vuelve a crear)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gastos_fijos_generados (
+      gasto_fijo_id INTEGER NOT NULL REFERENCES gastos_fijos(id) ON DELETE CASCADE,
+      mes TEXT NOT NULL,
+      PRIMARY KEY (gasto_fijo_id, mes)
+    )
+  `);
+  // ── Integración con la web ─────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS configuracion (
+      clave TEXT PRIMARY KEY,
+      valor TEXT
+    )
+  `);
+  // Cambios pendientes de mandar a la web (uno por producto; se reintenta si no hay internet)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS web_sync (
+      producto_id INTEGER PRIMARY KEY REFERENCES productos(id) ON DELETE CASCADE,
+      accion TEXT NOT NULL,
+      categoria_id INTEGER,
+      stock_evento TEXT,
+      intentos INTEGER NOT NULL DEFAULT 0,
+      ultimo_error TEXT,
+      updated_at TEXT
+    )
+  `);
+  const productosCols = db.prepare("PRAGMA table_info(productos)").all().map(col => col.name);
+  if (!productosCols.includes('web_producto_id')) {
+    db.exec('ALTER TABLE productos ADD COLUMN web_producto_id INTEGER');
+  }
+
+  const gastosCols = db.prepare("PRAGMA table_info(gastos)").all().map(col => col.name);
+  if (!gastosCols.includes('gasto_fijo_id')) {
+    db.exec('ALTER TABLE gastos ADD COLUMN gasto_fijo_id INTEGER REFERENCES gastos_fijos(id) ON DELETE SET NULL');
+  }
+
   console.log('✓ Tablas SQLite verificadas');
 }
 
