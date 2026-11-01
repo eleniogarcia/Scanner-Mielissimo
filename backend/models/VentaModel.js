@@ -36,13 +36,15 @@ class VentaModel {
       const transaction = db.db.transaction(() => {
         // Crear venta (created_at con horario Argentina UTC-3)
         const insertVentaStmt = db.db.prepare(
-          `INSERT INTO ventas (total, items_count, created_at) 
-           VALUES (?, ?, ?)`
+          `INSERT INTO ventas (total, items_count, metodo_pago, caja_id, created_at) 
+           VALUES (?, ?, ?, ?, ?)`
         );
         
         const ventaResult = insertVentaStmt.run(
           ventaData.total,
           ventaData.items_count,
+          ventaData.metodo_pago || 'efectivo',
+          ventaData.caja_id || null,
           getArgentinaTimestamp()
         );
         
@@ -57,6 +59,13 @@ class VentaModel {
           `INSERT INTO venta_items 
            (venta_id, producto_id, producto_nombre, producto_codigo, cantidad, precio_unitario, subtotal) 
            VALUES (?, ?, ?, ?, ?, ?, ?)`
+        );
+
+        // Descuenta stock solo si el producto tiene stock cargado (> 0), sin bajar de 0
+        const updateStockStmt = db.db.prepare(
+          `UPDATE productos 
+           SET stock = MAX(stock - ?, 0), updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND stock IS NOT NULL AND stock > 0`
         );
         
         const ventaItems = [];
@@ -80,6 +89,11 @@ class VentaModel {
             precio_unitario: item.precio_unitario,
             subtotal: item.subtotal
           });
+
+          // Items especiales (es_especial) tienen producto_id null y no descuentan stock
+          if (item.producto_id) {
+            updateStockStmt.run(item.cantidad, item.producto_id);
+          }
         }
 
         return {
@@ -99,10 +113,10 @@ class VentaModel {
 
         // Crear venta (created_at con horario Argentina UTC-3)
         const ventaResult = await client.query(
-          `INSERT INTO ventas (total, items_count, created_at) 
-           VALUES ($1, $2, $3) 
+          `INSERT INTO ventas (total, items_count, metodo_pago, caja_id, created_at) 
+           VALUES ($1, $2, $3, $4, $5) 
            RETURNING *`,
-          [ventaData.total, ventaData.items_count, getArgentinaTimestamp()]
+          [ventaData.total, ventaData.items_count, ventaData.metodo_pago || 'efectivo', ventaData.caja_id || null, getArgentinaTimestamp()]
         );
         
         const venta = ventaResult.rows[0];
@@ -127,6 +141,17 @@ class VentaModel {
           );
           
           ventaItems.push(itemResult.rows[0]);
+
+          // Descuenta stock solo si el producto tiene stock cargado (> 0), sin bajar de 0
+          // Items especiales (es_especial) tienen producto_id null y no descuentan stock
+          if (item.producto_id) {
+            await client.query(
+              `UPDATE productos 
+               SET stock = GREATEST(stock - $1, 0), updated_at = CURRENT_TIMESTAMP
+               WHERE id = $2 AND stock IS NOT NULL AND stock > 0`,
+              [item.cantidad, item.producto_id]
+            );
+          }
         }
 
         await client.query('COMMIT');
@@ -359,14 +384,84 @@ class VentaModel {
     return this.getGanancias({ periodo: 'mes' });
   }
 
-  // Eliminar venta
+  // Eliminar venta (repone el stock de los productos vendidos, si tienen stock cargado)
   static async delete(id) {
-    // Los items se eliminarán automáticamente por CASCADE
-    const result = await db.query(
-      'DELETE FROM ventas WHERE id = $1 RETURNING *',
-      [id]
-    );
-    return result.rows[0];
+    const isElectronMode = process.env.ELECTRON_MODE === 'true' || process.env.npm_package_name === 'mielissimo-pos';
+
+    if (isElectronMode) {
+      // SQLite con better-sqlite3
+      const transaction = db.db.transaction(() => {
+        const getVentaStmt = db.db.prepare('SELECT * FROM ventas WHERE id = ?');
+        const venta = getVentaStmt.get(id);
+        if (!venta) return null;
+
+        const getItemsStmt = db.db.prepare(
+          'SELECT * FROM venta_items WHERE venta_id = ? AND producto_id IS NOT NULL'
+        );
+        const items = getItemsStmt.all(id);
+
+        // Solo repone stock a productos que tienen stock cargado (stock IS NOT NULL)
+        const restoreStockStmt = db.db.prepare(
+          `UPDATE productos 
+           SET stock = stock + ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND stock IS NOT NULL`
+        );
+        for (const item of items) {
+          restoreStockStmt.run(item.cantidad, item.producto_id);
+        }
+
+        const deleteStmt = db.db.prepare('DELETE FROM ventas WHERE id = ?');
+        deleteStmt.run(id); // los items se eliminan automáticamente por CASCADE
+
+        return venta;
+      });
+
+      return transaction();
+
+    } else {
+      // PostgreSQL
+      const client = await db.pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        const ventaResult = await client.query('SELECT * FROM ventas WHERE id = $1', [id]);
+        const venta = ventaResult.rows[0];
+
+        if (!venta) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+
+        const itemsResult = await client.query(
+          'SELECT * FROM venta_items WHERE venta_id = $1 AND producto_id IS NOT NULL',
+          [id]
+        );
+
+        // Solo repone stock a productos que tienen stock cargado (stock IS NOT NULL)
+        for (const item of itemsResult.rows) {
+          await client.query(
+            `UPDATE productos 
+             SET stock = stock + $1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2 AND stock IS NOT NULL`,
+            [item.cantidad, item.producto_id]
+          );
+        }
+
+        // Los items se eliminarán automáticamente por CASCADE
+        await client.query('DELETE FROM ventas WHERE id = $1', [id]);
+
+        await client.query('COMMIT');
+
+        return venta;
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
   }
 }
 

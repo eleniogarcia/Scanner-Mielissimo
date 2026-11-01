@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-import { productosAPI, ventasAPI } from '../services/api';
+import { productosAPI, ventasAPI, METODOS_PAGO } from '../services/api';
 import './POS.css';
 
-function POS({ isActive }) {
+function POS({ isActive, cajaEstado, cajaError, refreshCaja, irACaja }) {
+  // La caja está cerrada solo si el servidor respondió que no hay caja abierta (null).
+  // Si todavía está cargando (undefined) o hubo error de conexión, no bloqueamos.
+  const cajaCerrada = cajaEstado === null;
   
   // ── Tabs (pedidos simultáneos) ─────────────────────────────────
   const tabCounterRef = useRef(null);
@@ -55,6 +58,7 @@ function POS({ isActive }) {
   const ventaExitosa = ventaExitosaMap[activeTabId] || null;
   const itemsAnimando = !!itemsAnimandoMap[activeTabId];
   const [modalConfirmar, setModalConfirmar] = useState(false);
+  const [metodoPago, setMetodoPago] = useState('efectivo');
   const [sugerencias, setSugerencias] = useState([]);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
   const [seleccionIndex, setSeleccionIndex] = useState(-1);
@@ -236,13 +240,17 @@ function POS({ isActive }) {
   const forzarFocoConReintentos = () => {
     // Asegurarnos de que la ventana tiene el foco a nivel OS primero
     window.focus();
-    // Reintentar múltiples veces con delays crecientes para lidiar con Electron
-    const delays = [50, 150, 350, 600, 1000];
+    // Reintentar múltiples veces con delays crecientes para lidiar con Electron.
+    // IMPORTANTE: no abandonar si input.disabled — el estado puede estar limpiándose de forma
+    // asíncrona (React batching) y el input puede seguir deshabilitado en los primeros intentos.
+    const delays = [50, 150, 350, 600, 1000, 1500, 2500];
     const timers = [];
     delays.forEach(delay => {
       const t = setTimeout(() => {
         const input = inputRef.current;
-        if (!input || input.disabled) return;
+        if (!input) return;
+        // Si sigue deshabilitado, saltar este intento pero NO cancelar los siguientes
+        if (input.disabled) return;
         // Bypass total: quitar foco del elemento activo y forzar al input del scanner
         try {
           if (document.activeElement) {
@@ -274,6 +282,25 @@ function POS({ isActive }) {
       limpiarRefsTemporales();
     };
   }, [isActive]);
+
+  // FIX: cuando volvemos a "Vender" (isActive=true) y procesandoVenta acaba de pasar a false
+  // (limpiado de forma asíncrona por limpiarEstadoInteractivo), aseguramos el foco.
+  // Esto cubre la race condition donde los timers de forzarFocoConReintentos dispararon
+  // antes de que React re-renderizara con disabled=false.
+  const prevIsActiveRef = useRef(false);
+  useEffect(() => {
+    if (!isActive || procesandoVenta) return;
+    // Solo actuar si estábamos volviendo al módulo (isActive acaba de ser true)
+    // o si procesandoVenta acaba de limpiarse tras una navegación
+    if (prevIsActiveRef.current !== isActive) {
+      prevIsActiveRef.current = isActive;
+      return; // el efecto de isActive ya maneja este caso
+    }
+    // procesandoVenta pasó a false mientras isActive ya era true → refocalizar
+    const t = setTimeout(() => focusScanInput({ force: true }), 80);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [procesandoVenta, isActive]);
 
   // Recuperar foco cuando la ventana vuelve a estar activa (muy común en Electron)
   useEffect(() => {
@@ -651,6 +678,11 @@ function POS({ isActive }) {
       mostrarMensaje('error', 'El carrito está vacío');
       return;
     }
+    if (cajaCerrada) {
+      mostrarMensaje('error', 'La caja está cerrada. Abrila para poder vender.');
+      return;
+    }
+    setMetodoPago('efectivo');
     setModalConfirmar(true);
   };
 
@@ -775,6 +807,7 @@ function POS({ isActive }) {
     }, 30000);
     try {
       const ventaData = {
+        metodo_pago: metodoPago,
         items: carritoSnapshot.map(item => {
           if (item.esEspecial) {
             return {
@@ -815,6 +848,7 @@ function POS({ isActive }) {
       setItemsAnimandoMap(prev => { const m = { ...prev }; delete m[tabId]; return m; });
       const errorMsg = error.response?.data?.message || 'Error al procesar la venta';
       mostrarMensaje('error', `✗ ${errorMsg}`);
+      if (error.response?.data?.code === 'CAJA_CERRADA') refreshCaja?.();
       console.error('Error:', error);
     } finally {
       if (procesandoVentaTimersRef.current[tabId]) {
@@ -1358,6 +1392,20 @@ function POS({ isActive }) {
         </div>
       )}
 
+      {/* ── Caja cerrada: no se puede vender ── */}
+      {cajaCerrada && isActive && (
+        <div className="modal-overlay caja-cerrada-overlay">
+          <div className="caja-cerrada-card">
+            <div className="caja-cerrada-icono">
+              <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h3>La caja está cerrada</h3>
+            <p>Para empezar a vender, abrí la caja con el efectivo inicial.</p>
+            <button className="btn btn-success btn-lg" onClick={irACaja}>Abrir caja</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal de confirmación de venta ── */}
       {modalConfirmar && (
         <div className="modal-overlay venta-confirm-overlay" onClick={() => setModalConfirmar(false)}>
@@ -1390,6 +1438,22 @@ function POS({ isActive }) {
             <div className="vcm-total">
               <span className="vcm-total-label">Total</span>
               <span className="vcm-total-valor">${calcularTotal().toFixed(2)}</span>
+            </div>
+
+            <div className="vcm-metodos">
+              <span className="vcm-metodos-label">Forma de pago</span>
+              <div className="vcm-metodos-opciones">
+                {METODOS_PAGO.map(m => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    className={`vcm-metodo${metodoPago === m.value ? ' vcm-metodo-activo' : ''}`}
+                    onClick={() => setMetodoPago(m.value)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="vcm-actions">

@@ -1295,3 +1295,63 @@
   font-style: italic;
 }
 
+
+/* ── Forma de pago en el modal de confirmación ── */
+.vcm-metodos {
+  padding: 0 1.25rem 1rem;
+}
+.vcm-metodos-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.4rem;
+}
+.vcm-metodos-opciones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+.vcm-metodo {
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.vcm-metodo:hover { border-color: #a5b4fc; }
+.vcm-metodo-activo {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+/* ── Bloqueo cuando la caja está cerrada ── */
+.pos-container .caja-cerrada-overlay {
+  /* Deja visible la barra de navegación para poder ir a Productos, Caja, etc. */
+  top: 62px;
+  background: rgba(10, 8, 40, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 150;
+}
+.caja-cerrada-card {
+  background: #fff;
+  border-radius: 1.25rem;
+  padding: 2rem 2.25rem;
+  max-width: 380px;
+  width: 92%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(10, 8, 40, 0.3);
+}
+.caja-cerrada-card h3 { font-size: 1.2rem; font-weight: 700; margin: 0.75rem 0 0.35rem; color: #0f172a; }
+.caja-cerrada-card p { color: #64748b; font-size: 0.9rem; margin-bottom: 1.25rem; }
+.caja-cerrada-icono {
+  width: 3.5rem; height: 3.5rem; margin: 0 auto;
+  border-radius: 1rem; background: #fee2e2; color: #b91c1c;
+  display: flex; align-items: center; justify-content: center;
+}

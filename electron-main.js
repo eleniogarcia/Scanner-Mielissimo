@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -53,72 +53,125 @@ function ensureFrontendBuiltOrThrow() {
   throw new Error(message);
 }
 
-// Liberar el puerto si esta ocupado
+// Liberar el puerto si esta ocupado — busca solo procesos en LISTENING en ese puerto exacto
 function liberarPuerto(port) {
   try {
-    const result = execSync(`netstat -ano | findstr :${port}`).toString();
-    const lines = result.trim().split('\n');
-    for (const line of lines) {
-      if (!line.includes('LISTENING') && !line.includes(':' + port + ' ')) continue;
+    // findstr /R busca con regex: solo líneas con ":3000 " o ":3000\t" seguido de espacios hasta LISTENING
+    const result = execSync(
+      `netstat -ano | findstr /R "[:][${String(port)[0]}-${String(port)[0]}]"`,
+      { timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).toString();
+
+    const pids = new Set();
+    for (const line of result.trim().split('\n')) {
+      // Solo procesar líneas con LISTENING
+      if (!line.toUpperCase().includes('LISTENING')) continue;
+      // Verificar que el puerto sea exactamente el buscado (evitar ej: 30000 cuando buscamos 3000)
+      const portPattern = new RegExp(`[.:]${port}\\s`);
+      if (!portPattern.test(line)) continue;
       const parts = line.trim().split(/\s+/);
       const pid = parts[parts.length - 1];
-      if (pid && pid !== '0' && !isNaN(pid)) {
-        try {
-          execSync(`taskkill /PID ${pid} /F`);
-          log(`Puerto ${port} liberado (PID ${pid} terminado)`);
-        } catch (e) {
-          log(`No se pudo terminar PID ${pid}: ${e.message}`);
-        }
+      if (pid && pid !== '0' && /^\d+$/.test(pid)) {
+        pids.add(pid);
       }
     }
+
+    if (pids.size === 0) {
+      log(`Puerto ${port}: ningún proceso en LISTENING encontrado`);
+      return;
+    }
+
+    for (const pid of pids) {
+      try {
+        execSync(`taskkill /PID ${pid} /F`, { timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] });
+        log(`Puerto ${port} liberado (PID ${pid} terminado)`);
+      } catch (e) {
+        log(`No se pudo terminar PID ${pid}: ${e.message}`);
+      }
+    }
+
+    // Esperar un momento para que el OS libere el puerto antes del próximo intento
+    // (tras hibernación/sleep el OS puede tardar más en soltar el socket)
+    try { execSync('ping 127.0.0.1 -n 4 > nul', { timeout: 6000 }); } catch { /* noop */ }
+
   } catch (e) {
-    log(`Puerto ${port} libre`);
+    log(`Puerto ${port} disponible o no se pudo verificar: ${e.message}`);
   }
 }
 
 function startBackend() {
   return new Promise((resolve, reject) => {
-    try {
-      log('Iniciando backend...');
+    const MAX_INTENTOS = 7;
+    const backendPath = path.join(app.getAppPath(), 'backend', 'server.js');
 
-      liberarPuerto(3000);
+    // Delays crecientes: le da más tiempo al OS/disco en cada reintento
+    // (útil tras hibernación, sleep prolongado, o disco HDD lento)
+    const delays = [1200, 1500, 2000, 2500, 3000, 4000, 5000];
 
-      const backendPath = path.join(app.getAppPath(), 'backend', 'server.js');
-      delete require.cache[backendPath];
-      const backendApp = require(backendPath);
+    const limpiarCacheBackend = () => {
+      try {
+        // Limpiar el módulo principal y sus dependencias directas para que
+        // un require fresco re-inicialice la conexión a la DB
+        const resolvedPath = require.resolve(backendPath);
+        delete require.cache[resolvedPath];
+        // También limpiar el módulo de database por si la conexión SQLite quedó rota
+        const dbPath = require.resolve(path.join(app.getAppPath(), 'backend', 'config', 'database.js'));
+        delete require.cache[dbPath];
+        try {
+          const sqlitePath = require.resolve(path.join(app.getAppPath(), 'backend', 'config', 'database-sqlite.js'));
+          delete require.cache[sqlitePath];
+        } catch { /* puede no existir si es modo web */ }
+      } catch (e) {
+        log(`Advertencia limpiando caché: ${e.message}`);
+      }
+    };
 
-      log('Backend importado correctamente');
+    const intentar = (intento) => {
+      const delay = delays[Math.min(intento - 1, delays.length - 1)];
+      log(`Iniciando backend (intento ${intento}/${MAX_INTENTOS})...`);
+      try {
+        limpiarCacheBackend();
+        const backendApp = require(backendPath);
+        log('Backend importado correctamente');
 
-      server = backendApp.listen(3000, () => {
-        log('Backend corriendo en puerto 3000');
-        resolve();
-      });
+        const s = backendApp.listen(3000, () => {
+          log(`Backend corriendo en puerto 3000 (intento ${intento})`);
+          server = s;
+          resolve();
+        });
 
-      server.on('error', (err) => {
-        log(`Error del servidor: ${err.message}`);
-        if (err.code === 'EADDRINUSE') {
-          log('Puerto ocupado, reintentando en 800ms...');
-          liberarPuerto(3000);
-          setTimeout(() => {
-            const s2 = backendApp.listen(3000, () => {
-              log('Backend corriendo en puerto 3000 (reintento)');
-              server = s2;
-              resolve();
-            });
-            s2.on('error', (err2) => {
-              log(`Error en reintento: ${err2.message}`);
-              reject(err2);
-            });
-          }, 800);
+        s.on('error', (err) => {
+          log(`Error en intento ${intento}: ${err.message}`);
+          if (intento < MAX_INTENTOS) {
+            if (err.code === 'EADDRINUSE') {
+              log(`Puerto 3000 ocupado — liberando...`);
+              liberarPuerto(3000);
+            }
+            log(`Reintentando en ${delay}ms...`);
+            setTimeout(() => intentar(intento + 1), delay);
+          } else {
+            reject(new Error(
+              err.code === 'EADDRINUSE'
+                ? `El puerto 3000 sigue ocupado luego de ${MAX_INTENTOS} intentos.\nCerrá otras instancias de la aplicación o reiniciá la computadora.`
+                : `No se pudo iniciar el backend luego de ${MAX_INTENTOS} intentos: ${err.message}`
+            ));
+          }
+        });
+
+      } catch (error) {
+        log(`Error al importar backend en intento ${intento}: ${error.message}\n${error.stack}`);
+        if (intento < MAX_INTENTOS) {
+          log(`Reintentando en ${delay}ms...`);
+          setTimeout(() => intentar(intento + 1), delay);
         } else {
-          reject(err);
+          reject(new Error(`No se pudo cargar el backend luego de ${MAX_INTENTOS} intentos: ${error.message}`));
         }
-      });
+      }
+    };
 
-    } catch (error) {
-      log(`Error al iniciar backend: ${error.message}\n${error.stack}`);
-      reject(error);
-    }
+    // Intentar liberar el puerto antes del primer intento y dar tiempo al OS
+    liberarPuerto(3000);
+    setTimeout(() => intentar(1), 800);
   });
 }
 

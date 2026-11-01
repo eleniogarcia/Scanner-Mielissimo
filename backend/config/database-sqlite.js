@@ -74,6 +74,67 @@ function initTablesIfNotExist() {
     db.exec('ALTER TABLE productos ADD COLUMN fecha_vencimiento TEXT');
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_productos_fecha_vencimiento ON productos(fecha_vencimiento)`);
+
+  // ── Caja y gastos ──────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cajas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      estado TEXT NOT NULL DEFAULT 'abierta',
+      monto_inicial REAL NOT NULL DEFAULT 0,
+      abierta_at TEXT NOT NULL,
+      cerrada_at TEXT,
+      observaciones TEXT,
+      observaciones_cierre TEXT,
+      monto_contado REAL,
+      efectivo_esperado REAL,
+      diferencia REAL,
+      cantidad_ventas INTEGER,
+      total_ventas REAL,
+      ventas_efectivo REAL,
+      ventas_tarjeta REAL,
+      ventas_transferencia REAL,
+      ingresos REAL,
+      retiros REAL
+    )
+  `);
+  // Solo puede haber una caja abierta a la vez
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cajas_una_abierta ON cajas(estado) WHERE estado = 'abierta'`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gastos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TEXT NOT NULL,
+      monto REAL NOT NULL CHECK (monto > 0),
+      categoria TEXT NOT NULL DEFAULT 'otros',
+      descripcion TEXT,
+      caja_id INTEGER REFERENCES cajas(id) ON DELETE SET NULL,
+      created_at TEXT DEFAULT (datetime('now', '-3 hours'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha)`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS caja_movimientos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      caja_id INTEGER NOT NULL REFERENCES cajas(id) ON DELETE CASCADE,
+      tipo TEXT NOT NULL CHECK (tipo IN ('ingreso', 'retiro')),
+      monto REAL NOT NULL CHECK (monto > 0),
+      motivo TEXT,
+      gasto_id INTEGER REFERENCES gastos(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_caja_movimientos_caja ON caja_movimientos(caja_id)`);
+
+  const ventasCols = db.prepare("PRAGMA table_info(ventas)").all().map(col => col.name);
+  if (!ventasCols.includes('metodo_pago')) {
+    db.exec("ALTER TABLE ventas ADD COLUMN metodo_pago TEXT DEFAULT 'efectivo'");
+  }
+  if (!ventasCols.includes('caja_id')) {
+    db.exec('ALTER TABLE ventas ADD COLUMN caja_id INTEGER REFERENCES cajas(id) ON DELETE SET NULL');
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_ventas_caja ON ventas(caja_id)`);
+
   console.log('✓ Tablas SQLite verificadas');
 }
 

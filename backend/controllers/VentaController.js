@@ -1,5 +1,6 @@
 const VentaModel = require('../models/VentaModel');
 const ProductoModel = require('../models/ProductoModel');
+const { CajaModel, METODOS_PAGO } = require('../models/CajaModel');
 const { validationResult } = require('express-validator');
 
 class VentaController {
@@ -17,6 +18,24 @@ class VentaController {
       }
 
       const { items } = req.body;
+      const metodoPago = req.body.metodo_pago || 'efectivo';
+
+      if (!METODOS_PAGO.includes(metodoPago)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Método de pago inválido'
+        });
+      }
+
+      // No se puede vender con la caja cerrada
+      const cajaAbierta = await CajaModel.getAbierta();
+      if (!cajaAbierta) {
+        return res.status(409).json({
+          success: false,
+          code: 'CAJA_CERRADA',
+          message: 'La caja está cerrada. Abrí la caja para poder vender.'
+        });
+      }
 
       // Validar que hay items
       if (!items || items.length === 0) {
@@ -100,7 +119,9 @@ class VentaController {
       // Crear venta
       const ventaData = {
         total: parseFloat(total.toFixed(2)),
-        items_count: itemsCount
+        items_count: itemsCount,
+        metodo_pago: metodoPago,
+        caja_id: cajaAbierta.id
       };
 
       const venta = await VentaModel.create(ventaData, ventaItems);

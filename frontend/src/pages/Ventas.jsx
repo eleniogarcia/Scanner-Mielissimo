@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ventasAPI } from '../services/api';
+import { ventasAPI, nombreMetodoPago } from '../services/api';
+import BalanceMensual from './BalanceMensual';
 import './Ventas.css';
 
 function Ventas() {
@@ -14,6 +15,13 @@ function Ventas() {
   const [fechaFin, setFechaFin] = useState('');
   const [periodoGanancias, setPeriodoGanancias] = useState('hoy');
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+  // Modal de confirmación propio (reemplaza window.confirm para no romper el foco en Electron)
+  const [confirmModal, setConfirmModal] = useState({ visible: false, mensaje: '', onConfirm: null });
+
+  const mostrarConfirm = (mensaje, onConfirm) => {
+    setConfirmModal({ visible: true, mensaje, onConfirm });
+  };
+  const cerrarConfirm = () => setConfirmModal({ visible: false, mensaje: '', onConfirm: null });
 
   // Ranking
   const [rankingData, setRankingData] = useState([]);
@@ -93,19 +101,17 @@ function Ventas() {
     }
   };
 
-  const eliminarVenta = async (ventaId) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta venta? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
-    try {
-      await ventasAPI.delete(ventaId);
-      setMensaje({ tipo: 'success', texto: 'Venta eliminada exitosamente' });
-      cargarDatos();
-    } catch (error) {
-      console.error('Error al eliminar venta:', error);
-      setMensaje({ tipo: 'error', texto: 'Error al eliminar la venta' });
-    }
+  const eliminarVenta = (ventaId) => {
+    mostrarConfirm('¿Estás seguro de eliminar esta venta? Esta acción no se puede deshacer.', async () => {
+      try {
+        await ventasAPI.delete(ventaId);
+        setMensaje({ tipo: 'success', texto: 'Venta eliminada exitosamente' });
+        cargarDatos();
+      } catch (error) {
+        console.error('Error al eliminar venta:', error);
+        setMensaje({ tipo: 'error', texto: 'Error al eliminar la venta' });
+      }
+    });
   };
 
   const formatearFecha = (fecha) => {
@@ -123,13 +129,13 @@ function Ventas() {
     try {
       let ventasLista = [];
       if (periodoRanking === 'hoy') {
-        const r = await ventasAPI.getToday(); ventasLista = r.data.data || [];
+        const r = await ventasAPI.getToday(true); ventasLista = r.data.data || [];
       } else if (periodoRanking === 'semana') {
-        const r = await ventasAPI.getWeekly(); ventasLista = r.data.data || [];
+        const r = await ventasAPI.getWeekly(true); ventasLista = r.data.data || [];
       } else if (periodoRanking === 'mes') {
-        const r = await ventasAPI.getMonthly(); ventasLista = r.data.data || [];
+        const r = await ventasAPI.getMonthly(true); ventasLista = r.data.data || [];
       } else {
-        const r = await ventasAPI.getAll(300, 0); ventasLista = r.data.data || [];
+        const r = await ventasAPI.getAll(300, 0, null, null, true); ventasLista = r.data.data || [];
       }
       // Usar solo ventas que ya traen items (evitar N+1 llamadas que traban la app)
       const conDetalle = ventasLista.filter(v => Array.isArray(v.items) && v.items.length > 0);
@@ -408,6 +414,7 @@ function Ventas() {
         <button className={`tab ${tab === 'historial' ? 'active' : ''}`} onClick={() => setTab('historial')}>Historial</button>
         <button className={`tab ${tab === 'ranking' ? 'active' : ''}`} onClick={() => setTab('ranking')}>🏆 Ranking</button>
         <button className={`tab ${tab === 'resumen' ? 'active' : ''}`} onClick={() => setTab('resumen')}>Resumen</button>
+        <button className={`tab ${tab === 'balance' ? 'active' : ''}`} onClick={() => setTab('balance')}>Gastos y balance del mes</button>
       </div>
 
       {/* Ranking */}
@@ -589,6 +596,7 @@ function Ventas() {
                   <th>ID</th>
                   <th>Fecha</th>
                   <th>Items</th>
+                  <th>Pago</th>
                   <th>Total</th>
                   <th>Acciones</th>
                 </tr>
@@ -596,7 +604,7 @@ function Ventas() {
               <tbody>
                 {ventas.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
                       No hay ventas registradas
                     </td>
                   </tr>
@@ -606,6 +614,7 @@ function Ventas() {
                       <td><strong>#{venta.id}</strong></td>
                       <td>{formatearFecha(venta.created_at)}</td>
                       <td>{venta.items_count}</td>
+                      <td>{nombreMetodoPago(venta.metodo_pago)}</td>
                       <td><strong className="text-success">${parseFloat(venta.total).toFixed(2)}</strong></td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -714,6 +723,9 @@ function Ventas() {
         </>
       )}
 
+      {/* Gastos y balance mensual */}
+      {tab === 'balance' && <BalanceMensual />}
+
       {/* Modal de detalle */}
       {ventaSeleccionada && (
         <div className="modal-overlay" onClick={() => setVentaSeleccionada(null)}>
@@ -732,6 +744,10 @@ function Ventas() {
                 <div className="info-row">
                   <span>Total Items:</span>
                   <span>{ventaSeleccionada.items_count}</span>
+                </div>
+                <div className="info-row">
+                  <span>Forma de pago:</span>
+                  <span>{nombreMetodoPago(ventaSeleccionada.metodo_pago)}</span>
                 </div>
               </div>
 
@@ -883,6 +899,28 @@ function Ventas() {
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de confirmación (reemplaza window.confirm para no romper foco en Electron) */}
+      {confirmModal.visible && (
+        <div className="modal-overlay" onClick={cerrarConfirm}>
+          <div className="modal-content" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirmar acción</h2>
+            </div>
+            <div style={{ padding: '1.25rem 1.5rem' }}>
+              <p style={{ margin: 0, lineHeight: 1.5 }}>{confirmModal.mensaje}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', padding: '0 1.5rem 1.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={cerrarConfirm}>Cancelar</button>
+              <button
+                className="btn btn-danger"
+                onClick={() => { cerrarConfirm(); confirmModal.onConfirm?.(); }}
+              >
+                Confirmar
               </button>
             </div>
           </div>

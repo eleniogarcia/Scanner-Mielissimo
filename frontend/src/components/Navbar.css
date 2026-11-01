@@ -150,3 +150,14 @@
     font-size: 1rem;
   }
 }
+
+/* Indicador de estado de caja */
+.caja-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 0.15rem;
+}
+.caja-dot-abierta { background: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25); }
+.caja-dot-cerrada { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }

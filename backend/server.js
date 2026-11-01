@@ -5,6 +5,8 @@ const path = require('path');
 
 const productosRoutes = require('./routes/productos');
 const ventasRoutes = require('./routes/ventas');
+const cajaRoutes = require('./routes/caja');
+const gastosRoutes = require('./routes/gastos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +36,8 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/productos', productosRoutes);
 app.use('/api/ventas', ventasRoutes);
+app.use('/api/caja', cajaRoutes);
+app.use('/api/gastos', gastosRoutes);
 
 // Servir frontend en modo Electron
 if (process.env.ELECTRON_MODE) {

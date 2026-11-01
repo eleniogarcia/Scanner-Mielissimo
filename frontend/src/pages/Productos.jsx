@@ -46,6 +46,13 @@ function Productos() {
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
   const [modalError, setModalError] = useState('');
   const [paginaActual, setPaginaActual] = useState(1);
+  // Modal de confirmación propio (reemplaza window.confirm para no romper el foco en Electron)
+  const [confirmModal, setConfirmModal] = useState({ visible: false, mensaje: '', onConfirm: null });
+
+  const mostrarConfirm = (mensaje, onConfirm) => {
+    setConfirmModal({ visible: true, mensaje, onConfirm });
+  };
+  const cerrarConfirm = () => setConfirmModal({ visible: false, mensaje: '', onConfirm: null });
   const productosPorPagina = 10;
 
   useEffect(() => {
@@ -157,20 +164,20 @@ function Productos() {
     setShowModal(true);
   };
 
-  const handleEliminar = async (id, permanente = false) => {
-    const mensaje = permanente 
+  const handleEliminar = (id, permanente = false) => {
+    const msg = permanente 
       ? '⚠️ ¿ELIMINAR PERMANENTEMENTE este producto? Esta acción NO se puede deshacer.' 
       : '¿Desactivar este producto?';
     
-    if (!window.confirm(mensaje)) return;
-    
-    try {
-      await productosAPI.delete(id, permanente);
-      mostrarMensaje('success', permanente ? 'Producto eliminado permanentemente' : 'Producto desactivado');
-      cargarProductos();
-    } catch (error) {
-      mostrarMensaje('error', 'Error al eliminar producto');
-    }
+    mostrarConfirm(msg, async () => {
+      try {
+        await productosAPI.delete(id, permanente);
+        mostrarMensaje('success', permanente ? 'Producto eliminado permanentemente' : 'Producto desactivado');
+        cargarProductos();
+      } catch (error) {
+        mostrarMensaje('error', 'Error al eliminar producto');
+      }
+    });
   };
 
   const cerrarModal = () => {
@@ -723,6 +730,28 @@ function Productos() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal de confirmación (reemplaza window.confirm para no romper foco en Electron) */}
+      {confirmModal.visible && (
+        <div className="modal-overlay" onClick={cerrarConfirm}>
+          <div className="modal-content" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirmar acción</h2>
+            </div>
+            <div style={{ padding: '1.25rem 1.5rem' }}>
+              <p style={{ margin: 0, lineHeight: 1.5 }}>{confirmModal.mensaje}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', padding: '0 1.5rem 1.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={cerrarConfirm}>Cancelar</button>
+              <button
+                className="btn btn-danger"
+                onClick={() => { cerrarConfirm(); confirmModal.onConfirm?.(); }}
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

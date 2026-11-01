@@ -50,23 +50,19 @@ class ProductoController {
     }
   }
 
-  // GET /api/productos/codigo/:codigo - Buscar por código o nombre (para escaneo)
+  // GET /api/productos/codigo/:codigo - Buscar por código exacto (para escaneo)
   static async getByCodigo(req, res) {
     try {
       const codigo = req.params.codigo;
-      
-      // Primero intentar búsqueda exacta por código
-      let producto = await ProductoModel.getByCodigo(codigo);
-      
-      // Si no encuentra por código, buscar por nombre
-      if (!producto) {
-        const resultados = await ProductoModel.search(codigo);
-        
-        // Si encuentra resultados, tomar el primero
-        if (resultados.length > 0) {
-          producto = resultados[0];
-        }
-      }
+
+      // Match EXACTO únicamente. El escaneo nunca debe caer a una búsqueda
+      // difusa por nombre: eso puede matchear un producto sin relación con
+      // el código leído (por ejemplo códigos internos cortos como "1" o "2"
+      // que quedan contenidos como substring dentro de cualquier código de
+      // barras largo), agregándolo solo al carrito sin que nadie lo pida.
+      // La búsqueda por nombre para el autocompletado ya existe aparte en
+      // GET /api/productos/search.
+      const producto = await ProductoModel.getByCodigo(codigo);
       
       if (!producto) {
         return res.status(404).json({

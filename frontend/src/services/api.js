@@ -124,4 +124,49 @@ export const ventasAPI = {
     api.delete(`/ventas/${id}`)
 };
 
+// Caja (apertura, cierre y movimientos de efectivo)
+export const cajaAPI = {
+  getActual: () => api.get('/caja/actual'),
+  abrir: (monto_inicial, observaciones = '') => api.post('/caja/abrir', { monto_inicial, observaciones }),
+  cerrar: (monto_contado, observaciones = '') => api.post('/caja/cerrar', { monto_contado, observaciones }),
+  agregarMovimiento: (data) => api.post('/caja/movimientos', data),
+  eliminarMovimiento: (id) => api.delete(`/caja/movimientos/${id}`),
+  getHistorial: (limit = 30, offset = 0) => api.get(`/caja/historial?limit=${limit}&offset=${offset}`),
+  getDetalle: (id) => api.get(`/caja/${id}`)
+};
+
+// Gastos y balance mensual
+export const gastosAPI = {
+  getByMes: (mes) => api.get(`/gastos?mes=${mes}`),
+  create: (data) => api.post('/gastos', data),
+  delete: (id) => api.delete(`/gastos/${id}`),
+  getBalance: (mes) => api.get(`/gastos/balance?mes=${mes}`),
+  getBalanceMeses: (n = 6) => api.get(`/gastos/balance/meses?n=${n}`)
+};
+
+export const CATEGORIAS_GASTO = [
+  { value: 'alquiler', label: 'Alquiler' },
+  { value: 'servicios', label: 'Servicios (luz, agua, gas, internet)' },
+  { value: 'sueldos', label: 'Sueldos' },
+  { value: 'impuestos', label: 'Impuestos' },
+  { value: 'mantenimiento', label: 'Mantenimiento / arreglos' },
+  { value: 'insumos', label: 'Insumos (bolsas, limpieza, papel)' },
+  { value: 'otros', label: 'Otros' }
+];
+
+export const nombreCategoria = (value) =>
+  (CATEGORIAS_GASTO.find(c => c.value === value)?.label || value || '').split(' (')[0];
+
+export const METODOS_PAGO = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'tarjeta', label: 'Tarjeta' },
+  { value: 'transferencia', label: 'Transferencia / QR' }
+];
+
+export const nombreMetodoPago = (value) =>
+  METODOS_PAGO.find(m => m.value === (value || 'efectivo'))?.label || value;
+
+export const formatearPesos = (valor) =>
+  `$${(parseFloat(valor) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default api;

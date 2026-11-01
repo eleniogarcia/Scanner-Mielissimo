@@ -1,0 +1,112 @@
+/* ═══════════════ BALANCE MENSUAL ═══════════════ */
+.bal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem; color: #0f172a; }
+.bal-cargando { margin-top: 1rem; text-align: center; color: #64748b; }
+.bal-vacio { color: #94a3b8; font-size: 0.875rem; padding: 0.5rem 0; }
+.bal-verde { color: #15803d; }
+.bal-rojo { color: #b91c1c; }
+
+.bal-selector {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  display: flex; align-items: center; justify-content: center; gap: 1rem;
+}
+.bal-selector .btn { font-size: 1.1rem; min-width: 2.5rem; }
+.bal-mes { display: flex; align-items: center; gap: 0.75rem; }
+.bal-mes-nombre { font-size: 1.2rem; font-weight: 700; min-width: 170px; text-align: center; }
+.bal-mes-input { width: 160px; }
+
+/* Cuenta principal */
+.bal-cuenta {
+  margin-top: 1rem;
+  display: flex; align-items: stretch; gap: 0.5rem; flex-wrap: wrap;
+}
+.bal-paso {
+  flex: 1 1 150px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex; flex-direction: column; gap: 0.2rem;
+  text-align: center;
+}
+.bal-paso-label { font-size: 0.78rem; color: #64748b; font-weight: 600; }
+.bal-paso-valor { font-size: 1.35rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+.bal-paso-sub { font-size: 0.72rem; color: #94a3b8; }
+.bal-op { align-self: center; font-size: 1.5rem; font-weight: 700; color: #94a3b8; }
+.bal-resultado { flex: 1.3 1 180px; }
+.bal-resultado-pos { background: #f0fdf4; border-color: #86efac; }
+.bal-resultado-pos .bal-paso-valor { color: #15803d; font-size: 1.6rem; }
+.bal-resultado-neg { background: #fef2f2; border-color: #fca5a5; }
+.bal-resultado-neg .bal-paso-valor { color: #b91c1c; font-size: 1.6rem; }
+@media (max-width: 800px) { .bal-op { display: none; } }
+
+.bal-detalle-linea {
+  margin-top: 0.75rem;
+  font-size: 0.85rem; color: #475569;
+  text-align: center;
+}
+.bal-sep { margin: 0 0.5rem; color: #cbd5e1; }
+.bal-aviso { margin-top: 0.75rem; font-size: 0.85rem; }
+
+.bal-columnas {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+@media (max-width: 900px) { .bal-columnas { grid-template-columns: 1fr; } }
+
+/* Formulario de gasto */
+.bal-form {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 0.5rem;
+}
+.bal-form .input { width: 100%; }
+.bal-form-desc { grid-column: 1 / -1; }
+.bal-form-monto { position: relative; }
+.bal-form-monto > span {
+  position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+  color: #64748b; font-weight: 600;
+}
+.bal-form-monto .input { padding-left: 1.6rem; }
+.bal-hint { font-size: 0.75rem; color: #94a3b8; margin: 0.5rem 0 1rem; }
+
+/* Lista de gastos */
+.bal-lista { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.bal-gasto {
+  display: grid;
+  grid-template-columns: 48px 1fr auto 70px;
+  align-items: center; gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #eef0f4; border-radius: 0.5rem; background: #fafbfc;
+}
+.bal-gasto-fecha { font-size: 0.8rem; color: #64748b; font-weight: 600; }
+.bal-gasto-info { display: flex; flex-direction: column; min-width: 0; }
+.bal-gasto-cat { font-size: 0.875rem; font-weight: 600; color: #0f172a; }
+.bal-gasto-desc { font-size: 0.8rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bal-gasto-caja { font-size: 0.7rem; color: #7c3aed; font-weight: 600; }
+.bal-gasto-monto { font-weight: 700; color: #b91c1c; white-space: nowrap; }
+.bal-gasto-borrar {
+  justify-self: end;
+  border: none; background: transparent; color: #94a3b8;
+  cursor: pointer; font-size: 0.9rem; padding: 0.25rem 0.5rem; border-radius: 0.3rem;
+}
+.bal-gasto-borrar:hover { background: #fee2e2; color: #b91c1c; }
+.bal-gasto-confirmar { display: flex; gap: 0.25rem; justify-self: end; }
+
+/* Por categoría */
+.bal-cat-lista { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.bal-cat-fila { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem; }
+.bal-cat-barra { height: 6px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+.bal-cat-barra > div { height: 100%; background: #f87171; border-radius: 999px; }
+
+/* Histórico */
+.bal-historico { margin-top: 1rem; }
+.bal-tabla { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.bal-tabla th { text-align: left; font-size: 0.75rem; color: #64748b; font-weight: 600; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; }
+.bal-tabla td { padding: 0.6rem 0.5rem; border-bottom: 1px solid #f1f5f9; }
+.bal-tabla .num { text-align: right; white-space: nowrap; }
+.bal-tabla tbody tr { cursor: pointer; }
+.bal-tabla tbody tr:hover { background: #f8fafc; }
+.bal-fila-activa { background: #eef2ff !important; }
