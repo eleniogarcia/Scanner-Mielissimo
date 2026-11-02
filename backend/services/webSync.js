@@ -6,6 +6,8 @@
 // Los cambios se guardan en la tabla web_sync y se mandan en segundo plano. Si no hay internet
 // o la web no responde, quedan pendientes y se reintentan solos. Nunca frenan una venta.
 
+const fs = require('fs');
+const path = require('path');
 const db = require('../config/database');
 const { ahoraArgentina } = require('../utils/fecha');
 
@@ -19,11 +21,35 @@ let ultimoResultado = null; // { at, ok, mensaje }
 
 // ── Configuración (dirección de la web y clave) ───────────────────
 
+// Conexión incluida en el instalador (backend/config/web-default.json, no se sube a git).
+// Si existe, el POS viene conectado a la web sin configurar nada.
+let conexionDefault;
+function getConexionDefault() {
+  if (conexionDefault !== undefined) return conexionDefault;
+  conexionDefault = null;
+  try {
+    const archivo = path.join(__dirname, '..', 'config', 'web-default.json');
+    if (fs.existsSync(archivo)) {
+      const data = JSON.parse(fs.readFileSync(archivo, 'utf8'));
+      if (data.url && data.clave) conexionDefault = { url: normalizarUrl(data.url), clave: String(data.clave).trim() };
+    }
+  } catch (error) {
+    console.error('[web] No se pudo leer la conexión por defecto:', error.message);
+  }
+  return conexionDefault;
+}
+
+// Lo cargado a mano en el POS tiene prioridad; si no hay nada, se usa la conexión por defecto.
 async function getConfig() {
   const r = await db.query(`SELECT clave, valor FROM configuracion WHERE clave IN ('web_url', 'web_clave')`);
   const cfg = {};
   for (const row of r.rows) cfg[row.clave] = row.valor;
-  return { url: cfg.web_url || '', clave: cfg.web_clave || '' };
+  const def = getConexionDefault();
+  return {
+    url: cfg.web_url || def?.url || '',
+    clave: cfg.web_clave || def?.clave || '',
+    por_defecto: Boolean(def && !cfg.web_url && !cfg.web_clave)
+  };
 }
 
 async function guardarValor(clave, valor) {
@@ -285,6 +311,7 @@ async function getEstado() {
     configurada: Boolean(cfg.url && cfg.clave),
     url: cfg.url,
     tiene_clave: Boolean(cfg.clave),
+    por_defecto: cfg.por_defecto,
     publicados: parseInt(publicados.rows[0]?.n) || 0,
     pendientes: r.rows,
     ultimo_resultado: ultimoResultado

@@ -9,6 +9,8 @@ function ConexionWeb({ estado, onCerrar, onActualizado }) {
   const [guardando, setGuardando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [resultado, setResultado] = useState(null); // { ok, texto }
+  // Si viene conectado de fábrica, los campos quedan escondidos salvo que se quiera cambiar
+  const [editarConexion, setEditarConexion] = useState(!estado?.por_defecto);
 
   const errorDe = (e, porDefecto) => e.response?.data?.message || porDefecto;
 
@@ -76,6 +78,16 @@ function ConexionWeb({ estado, onCerrar, onActualizado }) {
             y vuelve a aparecer cuando cargás stock. Los cambios de precio también se pasan solos.
           </p>
 
+          {!editarConexion && (
+            <div className="alert alert-success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+              <span>✓ Conectado a <strong>{estado?.url?.replace(/^https?:\/\//, '')}</strong> (viene configurado de fábrica).</span>
+              <button type="button" className="btn btn-sm btn-outline" onClick={probar} disabled={probando}>
+                {probando ? 'Probando...' : 'Probar'}
+              </button>
+            </div>
+          )}
+
+          {editarConexion && (<>
           <div className="form-group">
             <label className="label">Dirección de la web</label>
             <input
@@ -101,20 +113,28 @@ function ConexionWeb({ estado, onCerrar, onActualizado }) {
             />
           </div>
 
+          </>)}
+
           {resultado && (
             <div className={`alert alert-${resultado.ok ? 'success' : 'error'}`} style={{ marginTop: '0.75rem' }}>
               {resultado.texto}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-outline" onClick={probar} disabled={probando || !url.trim()}>
-              {probando ? 'Probando...' : 'Probar conexión'}
+          {editarConexion ? (
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-outline" onClick={probar} disabled={probando || !url.trim()}>
+                {probando ? 'Probando...' : 'Probar conexión'}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={guardando}>
+                {guardando ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="btn btn-sm btn-outline" style={{ marginTop: '0.5rem' }} onClick={() => setEditarConexion(true)}>
+              Cambiar conexión
             </button>
-            <button type="submit" className="btn btn-primary" disabled={guardando}>
-              {guardando ? 'Guardando...' : 'Guardar'}
-            </button>
-          </div>
+          )}
 
           {estado?.configurada && (
             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>

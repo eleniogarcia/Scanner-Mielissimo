@@ -40,3 +40,9 @@ coverage/
 # Custom Build Outputs
 dist-electron/
 *.pdf
+
+# Clave secreta de conexión POS <-> web (no subir)
+CLAVE_WEB_POS.txt
+
+# Conexión con la web incluida en el instalador (contiene la clave, no subir)
+backend/config/web-default.json
